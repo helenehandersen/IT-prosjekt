@@ -1,6 +1,9 @@
 using System;
 using Npgsql;
 
+//deklarer variabler
+string Funksjon_valg ="";
+
 //Installere PostgreSQL-støtte: dotnet add package Npgsql
 
 //Tilkoblingsparametere til PostgreSQL database
@@ -14,18 +17,28 @@ con.Open();
 using var cmd = new NpgsqlCommand();
 cmd.Connection = con;
 
+//Funksjon valg
+Console.WriteLine("///////////////////////////////////////////////////////////");
+Console.WriteLine("Velg funksjon 'Endre bruker data', 'Endre kortleser data' eller 'Generer rapporter'");
+Console.WriteLine("Skriv inn ønsket funksjon valg:");
+Funksjon_valg = Convert.ToString(Console.ReadLine());
 
 
 //Mulighet for å legge til, slette eller endre brukerdata i Administrasjon tabell og endre kortleser info i kortleser tabellen i databasen
-Console.WriteLine("");
 
 //for hver bruker skal kunne endres
 //Etternavn, fornavn, epostadresse, KortID, gyldighetsperiode, pinkode
+if (Funksjon_valg == "Endre bruker data" && Funksjon_valg == "endre bruker data")
+{
 
+}
 
 //for hver kortleser
 ////Kortleser nummer, plassering
+if (Funksjon_valg == "Endre kortleser data" && Funksjon_valg == "endre kortleser data")
+{
 
+}
 
 
 //Motta forespørsel fra kortleser om validering
@@ -44,20 +57,25 @@ Console.WriteLine("");
 
 
 //Skrive melding til konsoll om Alarm med info om hvilken dør, tidspunkt, og kortID
-
+if ()//if alarm mottat fra simsim
+{
+    Console.WriteLine();
+}
 
 
 //Generere rapporter
+if (Funksjon_valg == "Generer rapporter" && Funksjon_valg == "generer rapporter")
+{
+
+    ////liste brukerdata på grunnlag av brukernavn
 
 
-////liste brukerdata på grunnlag av brukernavn
+    ////liste adgangslogg inkludert forsøk på inngang på grunnlag av brukernavn og datoer fra - til
 
 
-////liste adgangslogg inkludert forsøk på inngang på grunnlag av brukernavn og datoer fra - til
+    ////liste alle innpasseringsforsøk for en dør med ikke-godkjent adgang (uansett bruker)
 
+    ////liste av alarmer mellom 2 datoer
 
-////liste alle innpasseringsforsøk for en dør med ikke-godkjent adgang (uansett bruker)
-
-////liste av alarmer mellom 2 datoer
-
-////for et rom: første og siste adgang (for dager døren har vært i bruk)
+    ////for et rom: første og siste adgang (for dager døren har vært i bruk)
+}
