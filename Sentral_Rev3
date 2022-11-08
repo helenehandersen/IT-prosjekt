@@ -1,0 +1,175 @@
+using System;
+using Npgsql;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+
+class Semesteroppgave_Sentral_rev1
+{
+    public static void Main()
+    {
+        //deklarer variabler
+        string Funksjon_valg = "";
+
+        // Server oppsett
+        Socket lytteSokkel = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        IPEndPoint serverEP = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 9050);
+        lytteSokkel.Bind(serverEP);
+        lytteSokkel.Listen(10);
+
+        //Tilkoblingsparametere til PostgreSQL database
+        var cs = "Host=20.56.240.122;Username=h591452;Password=123456pass;Database=h591452";
+
+        //Bruke tilkoblingsparameterene til å opprette en forbindelse
+        using var con = new NpgsqlConnection(cs);
+        con.Open();
+
+        //Opprette "spørreobjekt"
+        using var cmd = new NpgsqlCommand();
+        cmd.Connection = con;
+
+        // Server aktivitet
+        while (true)
+        {
+            //deklarer variabler
+            Funksjon_valg = "";
+            // Venter på sklienter
+            Console.WriteLine("Venter på en klient ...");
+            Socket kommSokkel = lytteSokkel.Accept(); // blokkerende metode
+
+            // Når en klient har tatt kontakt: info om kommunikasjon skrives ut
+            VisKommunikasjonsinfo(kommSokkel);
+
+            // Kommunikasjon med en klient fortsetter i en ny tråd
+            ThreadPool.QueueUserWorkItem(KommunikasjonMedEnKlient, kommSokkel);
+        }
+
+        //Funksjon valg
+        Console.WriteLine("///////////////////////////////////////////////////////////");
+        Console.WriteLine("Velg funksjon 'Endre bruker data', 'Endre kortleser data' eller 'Generer rapporter'");
+        Console.WriteLine("Skriv inn ønsket funksjon valg:");
+        Funksjon_valg = Convert.ToString(Console.ReadLine());
+
+
+        //Mulighet for å legge til, slette eller endre brukerdata i Administrasjon tabell og endre kortleser info i kortleser tabellen i databasen
+
+        //for hver bruker skal kunne endres
+        //Etternavn, fornavn, epostadresse, KortID, gyldighetsperiode, pinkode
+        if (Funksjon_valg == "Endre bruker data" && Funksjon_valg == "endre bruker data")
+        {
+
+        }
+
+        //for hver kortleser
+        ////Kortleser nummer, plassering
+        if (Funksjon_valg == "Endre kortleser data" && Funksjon_valg == "endre kortleser data")
+        {
+
+        }
+
+        //Lagre alle passeringsforsøk
+
+
+        //Generere rapporter
+        if (Funksjon_valg == "Generer rapporter" && Funksjon_valg == "generer rapporter")
+        {
+
+            ////liste brukerdata på grunnlag av brukernavn
+
+
+            ////liste adgangslogg inkludert forsøk på inngang på grunnlag av brukernavn og datoer fra - til
+
+
+            ////liste alle innpasseringsforsøk for en dør med ikke-godkjent adgang (uansett bruker)
+
+            ////liste av alarmer mellom 2 datoer
+
+            ////for et rom: første og siste adgang (for dager døren har vært i bruk)
+        }
+    }
+
+    static void KommunikasjonMedEnKlient(object arg)
+    {
+        Socket kommSokkel = arg as Socket;
+
+        string mottattTekst = "";
+        string tekstSomSkalSendes = "";
+
+        bool ferdig = false;
+
+        string hilsen = "Velkommen til en enkel testserver";
+        SendTekst(kommSokkel, hilsen, out ferdig);
+
+        while (!ferdig)
+        {
+            // Motta data fra en klient 
+            mottattTekst = MottaTekst(kommSokkel, out ferdig);
+
+            //Motta forespørsel fra kortleser om validering
+            //først valider Bruker id
+            //if(brukerid_fra_kortleser == brukerid i database)
+            //så valider pinkode og gyldighets periode
+            //if(pinkode_fra_kortleser == pinkode_database)
+
+            if (!ferdig)
+            {
+
+                // Sende svar til klient
+                SendTekst(kommSokkel, tekstSomSkalSendes, out ferdig);
+            }
+        }
+        // Lukker kommunikasjonssokkel og viser info
+        IPEndPoint klientEP = kommSokkel.RemoteEndPoint as IPEndPoint;
+        Console.WriteLine("Forbindelsen med {0}:{1} er brutt", klientEP.Address, klientEP.Port);
+        kommSokkel.Close();
+    }
+
+
+    static string MottaTekst(Socket kommSokkel, out bool feilHarOppstått)
+    {
+        string svar = "";
+        feilHarOppstått = false;
+
+        try
+        {
+            byte[] data = new byte[1024];
+            int antallBytesMottatt = kommSokkel.Receive(data);
+
+            if (antallBytesMottatt > 0) svar = Encoding.ASCII.GetString(data, 0, antallBytesMottatt);
+            else feilHarOppstått = true;
+        }
+        catch (Exception unntak)
+        {
+            Console.WriteLine("Feil: " + unntak.Message);
+            feilHarOppstått = true;
+        }
+        return svar;
+    }
+
+    static void SendTekst(Socket kommSokkel, string tekstSomSkalSendes, out bool feilHarOppstått)
+    {
+        feilHarOppstått = false;
+
+        try
+        {
+            byte[] data = Encoding.ASCII.GetBytes(tekstSomSkalSendes);
+            kommSokkel.Send(data, data.Length, SocketFlags.None);
+        }
+        catch (Exception unntak)
+        {
+            Console.WriteLine("Feil: " + unntak.Message);
+            feilHarOppstått = true;
+        }
+    }
+    //usikker på om blir brukt
+    static void VisKommunikasjonsinfo(Socket s)
+    {
+        IPEndPoint klientEP = s.RemoteEndPoint as IPEndPoint;
+        IPEndPoint serverEP = s.LocalEndPoint as IPEndPoint;
+        Console.WriteLine("Kommunikasjon med klient: {0}:{1}", klientEP.Address, klientEP.Port);
+        Console.WriteLine("Server bruker {0}:{1}", serverEP.Address, serverEP.Port);
+    }
+
+
+
+}
