@@ -1,0 +1,63 @@
+using System;
+using Npgsql;
+
+//Installere PostgreSQL-støtte: dotnet add package Npgsql
+
+//Tilkoblingsparametere til PostgreSQL database
+var cs = "Host=20.56.240.122;Username=h591452;Password=123456pass;Database=h591452";
+
+//Bruke tilkoblingsparameterene til å opprette en forbindelse
+using var con = new NpgsqlConnection(cs);
+con.Open();
+
+//Opprette "spørreobjekt"
+using var cmd = new NpgsqlCommand();
+cmd.Connection = con;
+
+
+
+//Mulighet for å legge til, slette eller endre brukerdata i Administrasjon tabell og endre kortleser info i kortleser tabellen i databasen
+Console.WriteLine("");
+
+//for hver bruker skal kunne endres
+//Etternavn, fornavn, epostadresse, KortID, gyldighetsperiode, pinkode
+
+
+//for hver kortleser
+////Kortleser nummer, plassering
+
+
+
+//Motta forespørsel fra kortleser om validering
+//først valider gyldig kort
+
+//så gyldig pinkode
+
+//deretter Sende kvittering tilbake med resultat
+
+
+//Lagre alle passeringsforsøk
+
+
+//Motta alarm fra kortleser
+//'dør brutt opp' eller 'dør åpen for lenge'
+
+
+//Skrive melding til konsoll om Alarm med info om hvilken dør, tidspunkt, og kortID
+
+
+
+//Generere rapporter
+
+
+////liste brukerdata på grunnlag av brukernavn
+
+
+////liste adgangslogg inkludert forsøk på inngang på grunnlag av brukernavn og datoer fra - til
+
+
+////liste alle innpasseringsforsøk for en dør med ikke-godkjent adgang (uansett bruker)
+
+////liste av alarmer mellom 2 datoer
+
+////for et rom: første og siste adgang (for dager døren har vært i bruk)
