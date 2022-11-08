@@ -93,6 +93,8 @@ namespace SemesterOppgave_Kortleser_forsok2
                 {
                     SendEnMelding(sp, "$O40");                          //Setter utgang til 0 at kortet ikke er tappet
                     btnSettInnKort.Enabled = true;                      //Gjør det mulig å trykke på knappen igjen
+                    TidIgjen = 45;
+                    sp.Close();
                 }
             }
             else
@@ -145,7 +147,10 @@ namespace SemesterOppgave_Kortleser_forsok2
                 btnÅpneDør.Enabled = true;
                 pinRiktig = true;
                 lbDørStatus.Items.Insert(0, "Dør låst opp");
-                SendEnMelding(sp, "$O60");                              //Skriver til SimSim at døren er ulåst
+                SendEnMelding(sp, "$O50");                              //Skriver til SimSim at døren er ulåst
+                Thread.Sleep(200);
+                PIN = "";
+                
             }
 
 
@@ -353,6 +358,7 @@ namespace SemesterOppgave_Kortleser_forsok2
             Thread.Sleep(200);
             SendEnMelding(sp, "$O40");                                          //Skriver melding til SimSim at kort ikke er tappet
             Thread.Sleep(200);
+            SendEnMelding(sp, "$O70");
 
             btnLukkDør.Enabled = false;
             btnSettInnKort.Enabled = true;
@@ -370,5 +376,4 @@ namespace SemesterOppgave_Kortleser_forsok2
 
         }
     }
-}
 }
