@@ -11,10 +11,11 @@ separerer hver kode med ','
 pinkode   
 kortid
 tid og dato
+kortleser_id
 plassering/romnr eks F103
 
 format melding blir
-"Kodeord,pinkode,kortid,tid/dato,roomnr"
+"Kodeord,pinkode,kortid,kortleserid,tid/dato,roomnr"
 
 så eksempel på melding blir
 "Alarm1,0000,0000,2022-11-09 13:46:22"
