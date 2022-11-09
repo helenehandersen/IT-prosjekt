@@ -1,0 +1,634 @@
+using System.IO.Ports;
+using System.Net.Sockets;
+using System.Net;
+using System.Threading.Tasks;
+using System.Text;
+
+namespace SemesterOppgave_Kortleser_forsok2
+{
+    public partial class Form1 : Form
+    {
+        string tekstSomSkalSendes, mottattTekst;
+        bool ferdig;
+        bool ingenKontaktMedServer;
+        string dataFraServer;
+        Socket klientSokkel;
+        bool kommuniser;
+        SerialPort sp;
+        string enMelding;
+        string data;
+        int TidIgjen;
+        string PIN;
+        string[] tPIN = new string[4];
+        bool dørÅpen;
+        int tidDørÅpen;
+        bool pinRiktig;
+        string[] tKortID = new string[4];
+        string kortID;
+        bool tast0;
+        bool tast1;
+        bool tast2;
+        bool tast3;
+        bool enHelMeldingMotatt;
+        Random r = new Random();
+        bool tappetKort;
+        public Form1()
+        {
+            InitializeComponent();
+
+            OppdaterSeriellePorter();
+            ferdig = false;
+            ingenKontaktMedServer = false;
+            klientSokkel = null;
+            dataFraServer = "";
+            kommuniser = false;
+            TidIgjen = 45;
+            btnLukkDør.Enabled = false;
+            btnÅpneDør.Enabled = true;
+            dørÅpen = false;
+            tidDørÅpen = 0;
+            pinRiktig = false;
+            tast0 = false;
+            tast1 = false;
+            tast2 = false;
+            tast3 = false;
+            enHelMeldingMotatt = false;
+
+            tKortID[0] = "0000";
+            tKortID[1] = "1111";
+            tKortID[2] = "2222";
+            tKortID[3] = "3333";
+
+            tappetKort = false;
+
+            tPIN[0] = "0000";
+            tPIN[1] = "0001";
+            tPIN[2] = "0010";
+            tPIN[3] = "0011";
+        }
+
+        private void label2_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void backgroundWorker1_DoWork(object sender, System.ComponentModel.DoWorkEventArgs e)
+        {
+            // Utføres av en hjelpetråd når RunWorkerAsync-brukes
+
+            enMelding = "";
+
+            if (tappetKort)                                             //Hvis btnSettInnKort er trykket og umulig å trykke på
+            {
+                Thread.Sleep(1000);                                     //Thread.Sleep(1000) for å telle ned 1 sekund om gangen
+                TidIgjen--;                                             //Teller nedover
+            }
+
+            if (dørÅpen)                                                //Hvis dør åpen (bool) er true
+            {
+                Thread.Sleep(1000);                                     //Teller hvert sekund
+                tidDørÅpen++;                                           //Teller oppover
+            }
+            else
+            {
+                tidDørÅpen = 0;                                         //Hvis døren lukkes/ikke åpnes, blir tiden 0
+            }
+
+            while (kommuniser && !enHelMeldingMotatt)                   //Gjør at vi kontinuerlig kommuniserer med SimSim
+            {
+                data = data + MottaData(sp);                            //Legger til meldinger fra SimSim i stringen
+
+
+                if (DataInneholderEnHelMelding(data))                   //Sjekker at vi leser hele meldingen
+                {
+
+                    data = HenteUtEnMelding(data, ref enMelding);       //Henter ut meldingen
+
+                    enHelMeldingMotatt = true;                          //Gir oss en boolsk verdi for om meldingen er mottatt
+                }
+            }
+        }
+
+        private void backgroundWorker1_RunWorkerCompleted(object sender, System.ComponentModel.RunWorkerCompletedEventArgs e)
+        {
+
+            backgroundWorker1.RunWorkerAsync();                         //Gjør at nedtellingen fungerer kontinuerlig
+
+            if (tappetKort)                                             //Hvis btnSettInnKort er trykket
+            {
+                txtTid.Text = Convert.ToString(TidIgjen);               //Konventerer tid til tekst for å skrive det til tekstboksen
+                txtPinKode.Text = PIN;
+                if (TidIgjen <= 0)                                      //Hvis tiden er gått ut
+                {
+                    SendEnMelding(sp, "$O40");                          //Setter utgang til 0 at kortet ikke er tappet
+                    btnSettInnKort.Enabled = true;                      //Gjør det mulig å trykke på knappen igjen
+                    TidIgjen = 45;                                      //Setter tiden tilbake til 45 for nytt forsøk
+                    kommuniser = false;
+                    tappetKort = false;
+                    sp.Close();                                         //Lukker koblingen så ingenting går feil for neste bruker
+                }
+            }
+            else
+            {
+                txtTid.Text = "";                                       //Fjerner tiden fra nedtellings vinduet
+            }
+
+
+            if (tidDørÅpen >= 10)                                       //Hvis døren er åpen i mer ennn 10 sekunder vil alarmen gå
+            {
+                lbAlarmStatus.Items.Insert(0, "Dør vært åpen for lenge!");    //Legger til i alarmstatus at døren har vært åpen for lenge
+                tidDørÅpen = -1000000;                                  //Setter tiden langt ned slik at vi ikke får flere alarmer
+                SendEnMelding(sp, "$O71");                              //Skriver til utgang i SimSim at alarmen har gått
+            }
+
+            if (tast0)                                                  //Skriver til SimSim at vi tast 0 er trykket
+            {
+                SendEnMelding(sp, "$O01");
+                tast0 = false;
+                if (enHelMeldingMotatt) SendEnMelding(sp, "$O00");      //Setter den til 0 igjen etter motatt melding fra SimSim
+            }
+            if (tast1)
+            {
+                SendEnMelding(sp, "$O11");
+                tast1 = false;
+                if (enHelMeldingMotatt) SendEnMelding(sp, "$O10");
+            }
+            if (tast2)
+            {
+                SendEnMelding(sp, "$O21");
+                tast2 = false;
+                if (enHelMeldingMotatt) SendEnMelding(sp, "$O20");
+            }
+            if (tast3)
+            {
+                SendEnMelding(sp, "$O31");
+                tast3 = false;
+                if (enHelMeldingMotatt) SendEnMelding(sp, "$O30");
+            }
+
+
+
+        }
+        static Socket KobleTilServer(out bool ferdig)
+        {
+            ferdig = false;
+            Socket klientSokkel = new Socket(AddressFamily.InterNetwork,
+                SocketType.Stream,
+                ProtocolType.Tcp);
+
+            IPEndPoint serverEP = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 9050);
+
+            try
+            {
+                klientSokkel.Connect(serverEP); // blokkerende metode
+            }
+            catch (SocketException unntak)
+            {
+                ferdig = true;
+            }
+
+            return klientSokkel;
+        }
+
+        static string MottaTekst(Socket kommSokkel, out bool feilHarOppstått)
+        {
+            string svar = "";
+            feilHarOppstått = false;
+
+            try
+            {
+                byte[] data = new byte[1024];
+                int antallBytesMottatt = kommSokkel.Receive(data);
+
+                if (antallBytesMottatt > 0) svar = Encoding.ASCII.GetString(data, 0, antallBytesMottatt);
+                else feilHarOppstått = true;
+            }
+            catch (Exception unntak)
+            {
+                MessageBox.Show("Feil: " + unntak.ToString());
+                feilHarOppstått = true;
+            }
+            return svar;
+        }
+
+        static void SendTekst(Socket kommSokkel, string tekstSomSkalSendes, out bool feilHarOppstått)
+        {
+            feilHarOppstått = false;
+
+            try
+            {
+                byte[] data = Encoding.ASCII.GetBytes(tekstSomSkalSendes);
+                kommSokkel.Send(data, data.Length, SocketFlags.None);
+            }
+            catch (Exception unntak)
+            {
+                MessageBox.Show("Feil: " + unntak.ToString());
+                feilHarOppstått = true;
+            }
+        }
+
+        void OppdaterSeriellePorter()
+        {
+            string[] allePorter = SerialPort.GetPortNames();
+            for (int i = 0; i < allePorter.Length; i++)
+            {
+                cbSeriellePorter.Items.Add(allePorter[i]);
+            }
+            if (cbSeriellePorter.Items.Count > 0)
+            {
+                cbSeriellePorter.SelectedIndex = 0;
+            }
+        }
+
+        void SeriellPortKommunikasjon(object o)
+        {
+
+            string comPort = o as string;
+
+
+        }
+
+        static string HenteUtEnMelding(string data, ref string enMelding)
+        {
+            int posStart = data.IndexOf('$');                                               //Alle meldingene starter med $
+            int posSlutt = data.IndexOf('#');                                               //Alle meldinge slutter med #
+
+            enMelding = data.Substring(posStart, (posSlutt - posStart) + 1);                //Klipper ut meldingen mellom start og slutt, så vi ikke får uønsket melding med 
+
+            if (posStart > 0) data = data.Substring(posStart);                              // Klipper vekk eventuelle tegn før $
+
+            if (enMelding.Length < data.Length) data = data.Substring(posSlutt + 1);        // Bevarer til senere bruk eventuelle tegn etter #
+            else data = "";
+            return data;
+        }
+
+        static bool DataInneholderEnHelMelding(string data)
+        {
+            bool svar = false;                                                               //En boolsk variabel for å indikere om hele meldingen er motatt
+
+            int posStart = data.IndexOf('$');
+            int posSlutt = data.IndexOf('#');
+            if (posStart != -1 && posSlutt != -1)                                           //Sjekker at både start og slutt tegnet er med i meldingen
+            {
+                if (posStart < posSlutt)                                                    //Hvis posStart er mindre en posSlutt vil det si at vi ikke har begynt å lese meldingen midt inni
+                {
+                    svar = true;
+                }
+            }
+            return svar;                                                                    //Retunerer svaret om vi har lest hele meldingen eller ikke
+        }
+
+        static string MottaData(SerialPort sp)
+        {
+            string svar = "";                                                               //String vi ønsker å retunere fra metoden
+            try
+            {
+                svar = sp.ReadExisting();                                                   //Leser filen vi har åpnet fra SerialPort
+            }
+            catch (Exception unntak)
+            {
+
+            }
+            return svar;
+        }
+
+        static void SendEnMelding(SerialPort s, string melding)
+        {
+            try
+            {
+                s.Write(melding);                                                           //Skriver melding til serieporten i try catch
+            }
+            catch (Exception unntak)
+            {
+
+            }
+        }
+
+        private void Form1_Load(object sender, EventArgs e)
+        {
+            backgroundWorker1.RunWorkerAsync();
+
+            klientSokkel = KobleTilServer(out ferdig);
+            if (ferdig)
+            {
+                lbFeilMeldinger.Items.Insert(0, "Feil har skjedd i mottak av tekst");
+            }
+            if (!ferdig)
+            {
+                string velkomstmelding = MottaTekst(klientSokkel, out ferdig);
+                if (ferdig) Application.Exit();
+                else
+                {
+                    lbFeilMeldinger.Items.Insert(0, velkomstmelding);
+                }
+            }
+        }
+
+        private void btnSettInnKort_Click(object sender, EventArgs e)
+        {
+            btnSettInnKort.Enabled = false;                             //Gjør det umulig å trykke på nye tapping av kort
+            btnÅpneDør.Enabled = false;                                 //Gjør det umulig å trykke på Åpne dør knappen før PIN kode er tastet inn
+            btnLukkDør.Enabled = false;                                 //Gjør det umulig å trykke på Lukk dør knapper
+            tappetKort = true;
+
+            txtKortID.Text = tKortID[r.Next(0, 3)];      //Viser kort ID
+            kortID = txtKortID.Text;
+
+            if (cbSeriellePorter.SelectedIndex >= 0)
+            {
+                string comPort = cbSeriellePorter.SelectedItem.ToString();
+                kommuniser = true;
+
+                sp = new SerialPort(comPort, 9600);
+
+                try
+                {
+                    sp.Open();
+                }
+                catch (Exception unntak)
+                {
+
+                }
+
+                if (sp.IsOpen)
+                {
+                    SendEnMelding(sp, "$S001");                     //Endre tidsintervallet til 1 sek
+                    Thread.Sleep(200);
+                    SendEnMelding(sp, "$O41");                      //Skrur på utgang 4 siden kortet er tappet
+                    Thread.Sleep(200);
+                    SendEnMelding(sp, "$O70");                      //Skrur av alarm utgang
+                    Thread.Sleep(200);
+                    SendEnMelding(sp, "$O51");                      //Skrur på at døren er låst
+                    Thread.Sleep(200);
+                    SendEnMelding(sp, "$O00");                      //Skrur av utgang 0
+                    Thread.Sleep(200);
+                    SendEnMelding(sp, "$O10");                      //Skrur av utgang 1
+                    Thread.Sleep(200);
+                    SendEnMelding(sp, "$O20");                      //Skrur av utgang 2
+                    Thread.Sleep(200);
+                    SendEnMelding(sp, "$O30");                      //Skrur av utgang 3
+                }
+            }
+        }
+
+        private void btnÅpneDør_Click_1(object sender, EventArgs e)
+        {
+            if (pinRiktig)                                          //Hvis Pin er riktig (boolsk verdi)
+            {
+                lbDørStatus.Items.Insert(0, "Dør åpnet");           //Skriver til Dørstatus at døren er åpnet
+                SendEnMelding(sp, "$O61");                          //Skriver til SimSim at døren er åpen
+
+                txtPinKode.Text = "";
+                btnÅpneDør.Enabled = false;                         //Gjør det umulig å trykke på ÅpneDør igjen før den er lukket
+                btnLukkDør.Enabled = true;                          //Gjør det mulig å trykke på Lukk dør knappen
+                dørÅpen = true;                                     //Boolsk verdi for å telle tiden den er åpen
+                pinRiktig = false;                                  //Setter boolsk verdi til false igjen for neste bruker
+            }
+            else
+            {
+                if (cbSeriellePorter.SelectedIndex >= 0)
+                {
+                    string comPort = cbSeriellePorter.SelectedItem.ToString();
+                    kommuniser = true;
+
+                    sp = new SerialPort(comPort, 9600);
+
+                    try
+                    {
+                        sp.Open();
+                    }
+                    catch (Exception unntak)
+                    {
+
+                    }
+                }
+                lbAlarmStatus.Items.Insert(0, "Dør brutt opp!");    //Hvis døren er åpnet uten pin er den brøtet opp
+                SendEnMelding(sp, "$O71");                          //Skriver alarm til SimSim
+                SendEnMelding(sp, "$O50");
+                SendEnMelding(sp, "$O61");
+                SendEnMelding(sp, "$F500");
+
+                btnLukkDør.Enabled = true;                          //Gjør det mulig å lukke døren igjen
+                dørÅpen = true;                                     //Boolsk variabel for å telle tiden døren er åpen
+            }
+        }
+
+
+        private void btn0_Click(object sender, EventArgs e)
+        {
+            PIN = PIN + "0";                                        //Skriver til PIN vinduet hva vi har tastet
+            tast0 = true;                                           //Boolsk variabel for å sende melding til SimSim at denne tasten er trykket
+
+            SendEnMelding(sp, "$O01");
+            Thread.Sleep(200);
+        }
+
+        private void btn1_Click(object sender, EventArgs e)
+        {
+            PIN = PIN + "1";
+            tast1 = true;
+
+            SendEnMelding(sp, "$O11");
+            Thread.Sleep(200);
+        }
+
+        private void btn2_Click(object sender, EventArgs e)
+        {
+            PIN = PIN + "2";
+            tast2 = true;
+
+            SendEnMelding(sp, "$O21");
+            Thread.Sleep(200);
+        }
+
+        private void btn3_Click(object sender, EventArgs e)
+        {
+            PIN = PIN + "3";
+            tast3 = true;
+
+            SendEnMelding(sp, "$O31");
+            Thread.Sleep(200);
+        }
+
+        private void txtPinKode_TextChanged(object sender, EventArgs e)
+        {
+            if (txtPinKode.TextLength == 4)
+            {
+                if (txtKortID.Text == tKortID[0])
+                {
+                    if (PIN == tPIN[0])                                           //Hvis PIN er riktig
+                    {
+                        btnSettInnKort.Enabled = true;
+                        btnÅpneDør.Enabled = true;
+                        pinRiktig = true;
+                        tekstSomSkalSendes = tKortID[0] + "," + tPIN[0];
+                        lbDørStatus.Items.Insert(0, "Dør låst opp");
+                        SendEnMelding(sp, "$O50");                              //Skriver til SimSim at døren er ulåst
+                        Thread.Sleep(200);
+                        PIN = "";
+                        lbDørStatus.Items.Insert(0, "Gyldig PIN");
+                        tappetKort = false;
+                    }
+                    else
+                    {
+                        SendEnMelding(sp, "$O40");                          //Setter utgang til 0 at kortet ikke er tappet
+                        btnSettInnKort.Enabled = true;                      //Gjør det mulig å trykke på knappen igjen
+                        TidIgjen = 45;                                      //Setter tiden tilbake til 45 for nytt forsøk                      
+                        txtPinKode.Text = "";
+                        tekstSomSkalSendes = tKortID[0] + "," + PIN;
+                        PIN = "";
+                        lbDørStatus.Items.Insert(0, "Ugyldig PIN");
+                        tappetKort = false;
+                        kommuniser = false;
+                        sp.Close();                                         //Lukker koblingen så ingenting går feil for neste bruker
+                    }
+                }
+                else if (txtKortID.Text == tKortID[1])
+                {
+                    if (PIN == tPIN[1])                                           //Hvis PIN er riktig
+                    {
+                        btnSettInnKort.Enabled = true;
+                        btnÅpneDør.Enabled = true;
+                        pinRiktig = true;
+                        tekstSomSkalSendes = tKortID[1] + "," + tPIN[1];
+                        tappetKort = false;
+                        lbDørStatus.Items.Insert(0, "Dør låst opp");
+                        SendEnMelding(sp, "$O50");                              //Skriver til SimSim at døren er ulåst
+                        Thread.Sleep(200);
+                        lbDørStatus.Items.Insert(0, "Gyldig PIN");
+                        PIN = "";
+                    }
+                    else
+                    {
+                        SendEnMelding(sp, "$O40");                          //Setter utgang til 0 at kortet ikke er tappet
+                        btnSettInnKort.Enabled = true;                      //Gjør det mulig å trykke på knappen igjen
+                        TidIgjen = 45;                                      //Setter tiden tilbake til 45 for nytt forsøk
+                        txtPinKode.Text = "";
+                        tekstSomSkalSendes = tKortID[0] + "," + PIN;
+                        tappetKort = false;
+                        PIN = "";
+                        lbDørStatus.Items.Insert(0, "Ugyldig PIN");
+                        kommuniser = false;
+                        sp.Close();                                         //Lukker koblingen så ingenting går feil for neste bruker
+                    }
+                }
+                else if (txtKortID.Text == tKortID[2])
+                {
+                    if (PIN == tPIN[2])                                           //Hvis PIN er riktig
+                    {
+                        btnSettInnKort.Enabled = true;
+                        btnÅpneDør.Enabled = true;
+                        pinRiktig = true;
+                        tekstSomSkalSendes = tKortID[2] + "," + tPIN[2];
+                        tappetKort = false;
+                        lbDørStatus.Items.Insert(0, "Dør låst opp");
+                        SendEnMelding(sp, "$O50");                              //Skriver til SimSim at døren er ulåst
+                        Thread.Sleep(200);
+                        lbDørStatus.Items.Insert(0, "Gyldig PIN");
+                        PIN = "";
+                    }
+                    else
+                    {
+                        SendEnMelding(sp, "$O40");                          //Setter utgang til 0 at kortet ikke er tappet
+                        btnSettInnKort.Enabled = true;                      //Gjør det mulig å trykke på knappen igjen
+                        TidIgjen = 45;                                      //Setter tiden tilbake til 45 for nytt forsøk
+                        tekstSomSkalSendes = tKortID[0] + "," + PIN;
+                        txtPinKode.Text = "";
+                        tappetKort = false;
+                        PIN = "";
+                        lbDørStatus.Items.Insert(0, "Ugyldig PIN");
+                        kommuniser = false;
+                        sp.Close();                                         //Lukker koblingen så ingenting går feil for neste bruker
+                    }
+                }
+                else if (txtKortID.Text == tKortID[3])
+                {
+                    if (PIN == tPIN[3])                                           //Hvis PIN er riktig
+                    {
+                        btnSettInnKort.Enabled = true;
+                        btnÅpneDør.Enabled = true;
+                        pinRiktig = true;
+                        tekstSomSkalSendes = tKortID[1] + "," + tPIN[1];
+                        tappetKort = false;
+                        lbDørStatus.Items.Insert(0, "Dør låst opp");
+                        SendEnMelding(sp, "$O50");                              //Skriver til SimSim at døren er ulåst
+                        Thread.Sleep(200);
+                        lbDørStatus.Items.Insert(0, "Gyldig PIN");
+                        PIN = "";
+                    }
+                    else
+                    {
+                        SendEnMelding(sp, "$O40");                          //Setter utgang til 0 at kortet ikke er tappet
+                        btnSettInnKort.Enabled = true;                      //Gjør det mulig å trykke på knappen igjen
+                        TidIgjen = 45;                                      //Setter tiden tilbake til 45 for nytt forsøk
+                        txtPinKode.Text = "";
+                        tekstSomSkalSendes = tKortID[0] + "," + PIN;
+                        PIN = "";
+                        lbDørStatus.Items.Insert(0, "Ugyldig PIN");
+                        tappetKort = false;
+                        kommuniser = false;
+                        sp.Close();                                         //Lukker koblingen så ingenting går feil for neste bruker
+                    }
+                }
+                backgroundWorker2.RunWorkerAsync();
+            }
+        }
+        private void btnLukkDør_Click_1(object sender, EventArgs e)
+        {
+            lbDørStatus.Items.Insert(0, "Dør lukket");                          //Skriver i dørstatus at dørene er lukket
+            lbDørStatus.Items.Insert(0, "Dør låst");                            //Skriver i dørstatus at døren er låst
+            SendEnMelding(sp, "$O60");                                          //Sender melding til SimSim at døren er lukket
+            Thread.Sleep(200);
+            SendEnMelding(sp, "$O51");                                          //Sender melding til SimSim at døren er låst
+            Thread.Sleep(200);
+            SendEnMelding(sp, "$O40");                                          //Skriver melding til SimSim at kort ikke er tappet
+            Thread.Sleep(200);
+            SendEnMelding(sp, "$O70");                                          //Skriver melding til SimSim at alarmen er skrudd av
+
+            btnLukkDør.Enabled = false;
+            btnSettInnKort.Enabled = true;
+            btnÅpneDør.Enabled = true;
+            dørÅpen = false;
+            TidIgjen = 45;
+            txtKortID.Text = "";
+
+            kommuniser = false;
+            Thread.Sleep(500);
+            sp.Close();
+        }
+
+        private void txtTid_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void backgroundWorker2_DoWork(object sender, System.ComponentModel.DoWorkEventArgs e)
+        {
+            if (!ferdig)
+            {
+                SendTekst(klientSokkel, tekstSomSkalSendes, out ferdig);
+            }
+
+            if (!ferdig)
+            {
+                // Thread.Sleep(10000);  // om vi vil demonstrere "treig" Internet
+                dataFraServer = MottaTekst(klientSokkel, out ferdig);
+            }
+        }
+
+        private void backgroundWorker2_RunWorkerCompleted(object sender, System.ComponentModel.RunWorkerCompletedEventArgs e)
+        {
+            // Arbeid som utføres av GUI-tråden når bwHjelpetråd_DoWork har avsluttet
+            if (!ferdig)
+            {
+                mottattTekst = dataFraServer;
+                lbFeilMeldinger.Items.Insert(0, mottattTekst);
+            }
+        }
+
+        private void txtKortID_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+    }
+}
