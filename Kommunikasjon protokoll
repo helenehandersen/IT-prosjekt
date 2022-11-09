@@ -20,4 +20,4 @@ format melding blir
 "Kodeord,pinkode,kortid,kortleserid,tid/dato,roomnr"
 
 så eksempel på melding blir
-"Alarm1,0000,0000,1234,2022-11-09 13:46:22"
+"Alarm1,0000,0000,1234,2022-11-09 13:46:22,F103"
