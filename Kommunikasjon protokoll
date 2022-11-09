@@ -8,14 +8,16 @@ Validering
 hva trengs i meldingen
 separerer hver kode med ','
 
-pinkode   
-kortid
-tid og dato
-kortleser_id
-plassering/romnr eks F103
+splittetKode[0] = kodeord
+splittetKode[1] = pinkode   
+splittetKode[2] = kortid
+splittetKode[3] = tid og dato
+splittetKode[4] = kortleser_id
+splittetKode[5] = plassering/romnr eks F103
+
 
 format melding blir
 "Kodeord,pinkode,kortid,kortleserid,tid/dato,roomnr"
 
 så eksempel på melding blir
-"Alarm1,0000,0000,2022-11-09 13:46:22"
+"Alarm1,0000,0000,1234,2022-11-09 13:46:22"
