@@ -1,0 +1,312 @@
+using System;
+using Npgsql;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+
+
+class Semesteroppgave_Sentral_rev1
+{
+    //static class splittetTekst
+    //{
+    //    public static string[] a = new string[50];
+    //}
+    public static void Main()
+    {
+        // Server oppsett
+        Socket lytteSokkel = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        IPEndPoint serverEP = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 9050);
+        lytteSokkel.Bind(serverEP);
+        lytteSokkel.Listen(10);
+
+        //Tilkoblingsparametere til PostgreSQL database
+        var cs = "Host=20.56.240.122;Username=h591452;Password=123456pass;Database=h591452";
+
+        //Bruke tilkoblingsparameterene til å opprette en forbindelse
+        using var con = new NpgsqlConnection(cs);
+        con.Open();
+
+        //Opprette "spørreobjekt"
+        using var cmd = new NpgsqlCommand();
+        cmd.Connection = con;
+        //deklarer en variabel som husker funksjonsvalg så det ikke kjøres om og om igjen
+        bool funksjonvalghusker = false;
+        int funksjonvalg = 0;
+
+        // Server aktivitet
+        while (true)
+        {
+            if (!funksjonvalghusker)
+            {
+                //Funksjon valg
+
+
+                Console.WriteLine("/////////////////////////////////////////////////////////////////////////////////////////////");
+                Console.WriteLine("Velg funksjon 1 for sentral og 2 for å endre i database");
+                Console.WriteLine("Dette valget får du kun 1 gang. Start programmet sentral på nytt for å få dette valget pånytt");
+                Console.Write("Skriv inn ønsket funksjon valg:");
+                funksjonvalg = Convert.ToInt32(Console.ReadLine());
+            }
+            if (funksjonvalg == 2)
+            {
+                int endredatavalg = 0;
+                Console.WriteLine();
+                Console.WriteLine("Velg mellom å gjøre endringer på data i databasen ved å trykke 1 eller trykk 2 for å velge rapport generering:");
+                endredatavalg = Convert.ToInt32(Console.ReadLine());
+
+                //Endre data i databasen
+                if (endredatavalg == 1)
+                {
+                    int brukervalg = 0;
+                    string[] spoorringTilDB = new string[100];
+                    Console.WriteLine();
+                    Console.WriteLine("Tast 1 for å Legge til ny brukerinformasjon, tast 2 for å endre brukerinformasjon eller tast 3 for å slette bruker informasjon");
+
+
+                    if (brukervalg == 1)
+                    {
+                        //ber bruker fylle inn data som sendes til db
+                        Console.WriteLine();
+                        Console.WriteLine("Du vil nå bli bedt om å fylle inn dataen du vil legge til i databasen");
+                        Console.Write("Fyll inn kortID: ");
+                        spoorringTilDB[0] = Console.ReadLine();
+
+                        Console.Write("Fyll inn pinkode: ");
+                        spoorringTilDB[7] = Console.ReadLine();
+
+                        Console.Write("Fyll inn etternavn til bruker som legges til: ");
+                        spoorringTilDB[1] = Console.ReadLine();
+
+                        Console.Write("Fyll inn fornavn til bruker som legges til: ");
+                        spoorringTilDB[2] = Console.ReadLine();
+
+                        Console.Write("Fyll inn Epost: ");
+                        spoorringTilDB[3] = Console.ReadLine();
+
+                        Console.Write("Velg glydighetsperiode tast 1 for default(kortet er aktivt til det endres) eller tast 2 for å angi gyldighets periode: ");
+                        spoorringTilDB[4] = Console.ReadLine();
+
+                        if (spoorringTilDB[4] == "1")
+                        {
+                            spoorringTilDB[5] = "null";
+                            spoorringTilDB[6] = "null";
+                        }
+                        else if (spoorringTilDB[4] == "2")
+                        {
+                            Console.WriteLine("Angi start og slutt for gyldighetsperiode i formatet YYYY-MM-DD HH:MI:SS");
+                            Console.Write("Fyll inn start dato og tid: ");
+                            spoorringTilDB[5] = Console.ReadLine();
+
+                            Console.Write("Fyll inn slutt dato og tid: ");
+                            spoorringTilDB[6] = Console.ReadLine();
+                        }
+                        cmd.CommandText = string.Format("insert into Administrasjon values ('{0}', '{1}', '{2}', '{3}', {4}, '{5}', '{6}', '{7}');", spoorringTilDB[0], spoorringTilDB[1], spoorringTilDB[2], spoorringTilDB[3], spoorringTilDB[4], spoorringTilDB[5], spoorringTilDB[6], spoorringTilDB[7]); //0 = KortId, 1 = Etternavn, 2 = Fornavn, 3 = Epost, 4 = gyldighetdefault(0 for default 1), 5 = gyldighetstart, 6 = gyldighets slutt, 7 = pinkode
+                        cmd.ExecuteNonQuery();
+                    }
+                    else if (brukervalg == 2)
+                    {
+
+
+
+
+                        cmd.CommandText = "update * from Administrasjon set Kort_ID = '{0}', ;";
+                        cmd.ExecuteNonQuery();
+
+                    }
+
+
+                }
+
+                //gennerere rapporter
+                else if (endredatavalg == 2)
+                {
+
+
+
+
+
+
+                }
+
+                funksjonvalg = 1;
+            }
+            else if (funksjonvalg == 1)
+            {
+                // Venter på sklienter
+                Console.WriteLine();
+                Console.WriteLine();
+                Console.WriteLine("Venter på en klient ...");
+                Socket kommSokkel = lytteSokkel.Accept(); // blokkerende metode
+
+                // Når en klient har tatt kontakt: info om kommunikasjon skrives ut
+                VisKommunikasjonsinfo(kommSokkel);
+
+                // Kommunikasjon med en klient fortsetter i en ny tråd
+                ThreadPool.QueueUserWorkItem(KommunikasjonMedEnKlient, kommSokkel);
+            }
+            funksjonvalghusker = true;
+        }
+    }
+
+    static void KommunikasjonMedEnKlient(object arg)
+    {
+        Socket kommSokkel = arg as Socket;
+
+        //Tilkoblingsparametere til PostgreSQL database
+        var cs = "Host=20.56.240.122;Username=h591452;Password=123456pass;Database=h591452";
+
+        //Bruke tilkoblingsparameterene til å opprette en forbindelse
+        using var con = new NpgsqlConnection(cs);
+        con.Open();
+
+        //Opprette "spørreobjekt"
+        using var cmd = new NpgsqlCommand();
+        cmd.Connection = con;
+
+        string mottattTekst = "";
+        string tekstSomSkalSendes = "";
+        string[] splittetTekst = new string[100];
+
+        bool ferdig = false;
+
+        while (!ferdig)
+        {
+            // Motta data fra en klient 
+            mottattTekst = MottaTekst(kommSokkel, out ferdig);
+            splittetTekst = mottattTekst.Split(',');
+
+            if (!ferdig)
+            {
+                //Motta forespørsel fra kortleser om validering
+                if (splittetTekst[0] == "Validering")
+                {
+
+                    //så valider at pinkode og KortId eksisterer
+                    //if(Antall forekomster av KortID og pinKode > 1) dette vil gi ut antall ganger kortid og pinkode forkommer i tabellen som hvis er enter mer enn 0 så er forespørselen validert
+                    if (Convert.ToInt32(cmd.CommandText = string.Format("SELECT COUNT(*) from users where Kort_ID like '{0}' AND Pin like '{1}';", splittetTekst[2], splittetTekst[1])) > 0)
+                    {
+                        //Sende svar til klient at valdiering ikke ble godkjent
+                        SendTekst(kommSokkel, "1", out ferdig);
+
+                        //lagrer passering forespørselen i tabell Passering_forespørsel
+                        cmd.CommandText = string.Format("insert into Passering_forespørsel values (null, '{0}', '{1}', '{2}', 1);", splittetTekst[4], splittetTekst[2], splittetTekst[3]); //tar høyde for at Primary key er inkremental
+                        cmd.ExecuteNonQuery();
+                        Console.WriteLine("Validerings forespørsel fra kortleser:{0} med kort id {1} Godkjent", splittetTekst[4], splittetTekst[2]);
+                    }
+                    else //else ikke godkjent validering
+                    {
+                        //Sende svar til klient at valdiering ikke ble godkjent
+                        SendTekst(kommSokkel, "0", out ferdig);
+
+                        //lagrer passering forespørselen i tabell Passering_forespørsel
+                        cmd.CommandText = string.Format("insert into Passering_forespørsel values (null, '{0}', '{1}', '{2}', 0);", splittetTekst[4], splittetTekst[2], splittetTekst[3]); //tar høyde for at Primary key er inkremental
+                        cmd.ExecuteNonQuery();
+
+                        Console.WriteLine("Validerings forespørsel fra kortleser: {0} med kort id {1} ikke godkjent", splittetTekst[4], splittetTekst[2]);
+                    }
+                }
+
+
+                // Sende svar til klient
+                //SendTekst(kommSokkel, tekstSomSkalSendes, out ferdig);
+                if (splittetTekst[0] == "Alarm1")
+                {
+                    Console.WriteLine("ALARM dør {0} åpen for lenge. Melding mottatt: {1}, siste KortID benyttet: {2}", splittetTekst[1], splittetTekst[2], splittetTekst[3]);
+                    cmd.CommandText = string.Format("insert into Alarm values (null, '{0}', '{1}', '{2}', {3});", splittetTekst[0], splittetTekst[3], splittetTekst[4], splittetTekst[2]); //tar høyde for at Primary key er inkremental
+                    cmd.ExecuteNonQuery();
+                }
+                else if (splittetTekst[0] == "Alarm2")
+                {
+                    Console.WriteLine("ALARM dør {0} har blit brutt. Melding mottatt: {1}, siste KortID benyttet: {2}", splittetTekst[1], splittetTekst[2], splittetTekst[3]);
+                    cmd.CommandText = string.Format("insert into Alarm values (null, '{0}', '{1}', '{2}', {3});", splittetTekst[0], splittetTekst[3], splittetTekst[4], splittetTekst[2]); //tar høyde for at Primary key er inkremental
+                    cmd.ExecuteNonQuery();
+                }
+
+                //deklarer variabler
+                string Funksjon_valg = "";
+
+                //Funksjon valg
+                Console.WriteLine("///////////////////////////////////////////////////////////");
+                Console.WriteLine("Velg funksjon 'Endre bruker data', 'Endre kortleser data' eller 'Generer rapporter'");
+                Console.WriteLine("Skriv inn ønsket funksjon valg:");
+
+
+                //Generere rapporter
+                if (Funksjon_valg == "Generer rapporter" && Funksjon_valg == "generer rapporter")
+                {
+
+                    ////liste brukerdata på grunnlag av brukernavn
+
+
+                    ////liste adgangslogg inkludert forsøk på inngang på grunnlag av brukernavn og datoer fra - til
+
+
+                    ////liste alle innpasseringsforsøk for en dør med ikke-godkjent adgang (uansett bruker)
+
+                    ////liste av alarmer mellom 2 datoer
+
+                    ////for et rom: første og siste adgang (for dager døren har vært i bruk)
+                }
+
+
+            }
+
+        }
+
+        // Lukker kommunikasjonssokkel og viser info
+        IPEndPoint klientEP = kommSokkel.RemoteEndPoint as IPEndPoint;
+        Console.WriteLine("Forbindelsen med {0}:{1} er brutt", klientEP.Address, klientEP.Port);
+        kommSokkel.Close();
+
+    }
+
+
+    static string MottaTekst(Socket kommSokkel, out bool feilHarOppstått)
+    {
+        string svar = "";
+        feilHarOppstått = false;
+
+        try
+        {
+            byte[] data = new byte[1024];
+            int antallBytesMottatt = kommSokkel.Receive(data);
+
+            if (antallBytesMottatt > 0) svar = Encoding.ASCII.GetString(data, 0, antallBytesMottatt);
+            else feilHarOppstått = true;
+        }
+        catch (Exception unntak)
+        {
+            Console.WriteLine("Feil: " + unntak.Message);
+            feilHarOppstått = true;
+        }
+        return svar;
+    }
+
+    static void SendTekst(Socket kommSokkel, string tekstSomSkalSendes, out bool feilHarOppstått)
+    {
+        feilHarOppstått = false;
+
+        try
+        {
+            byte[] data = Encoding.ASCII.GetBytes(tekstSomSkalSendes);
+            kommSokkel.Send(data, data.Length, SocketFlags.None);
+        }
+        catch (Exception unntak)
+        {
+            Console.WriteLine("Feil: " + unntak.Message);
+            feilHarOppstått = true;
+        }
+    }
+    //usikker på om blir brukt
+    static void VisKommunikasjonsinfo(Socket s)
+    {
+        IPEndPoint klientEP = s.RemoteEndPoint as IPEndPoint;
+        IPEndPoint serverEP = s.LocalEndPoint as IPEndPoint;
+        Console.WriteLine("Kommunikasjon med klient: {0}:{1}", klientEP.Address, klientEP.Port);
+        Console.WriteLine("Server bruker {0}:{1}", serverEP.Address, serverEP.Port);
+    }
+
+
+
+
+}
