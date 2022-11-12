@@ -1,0 +1,1261 @@
+using System.IO.Ports;
+using System.Net.Sockets;
+using System.Net;
+using System.Threading.Tasks;
+using System.Text;
+
+namespace SemesterOppgave_Kortleser_forsok2
+{
+    public partial class Form1 : Form
+    {
+        string tekstSomSkalSendes, mottattTekst;
+        bool ferdig;
+        string dataFraServer;
+        Socket klientSokkel;
+        bool kommuniser;
+        SerialPort sp;
+        string enMelding;
+        string data;
+        int TidIgjen;
+        string PIN;
+        string tidOgDato;
+        int kjøringer;
+        string dørNummer;
+        string kortleserID;
+        bool dørÅpen;
+        int tidDørÅpen;
+        bool pinRiktig;
+        string[] tKortID = new string[4];
+        List<string> lKortID = new List<string>();
+        List<string> lPIN = new List<string>();
+        string kortID;
+        bool tast0;
+        bool tast1;
+        bool tast2;
+        bool tast3;
+        bool enHelMeldingMotatt;
+        Random r = new Random();
+        bool tappetKort;
+        string tidligereKortID;
+        string tidligerPIN;
+        bool KjortEnGang;
+        public Form1()
+        {
+            InitializeComponent();
+
+            OppdaterSeriellePorter();                   //Viser oss ledige porter
+
+            dørNummer = "F103";
+
+            kjøringer = 0;
+            mottattTekst = "";
+            ferdig = false;
+            klientSokkel = null;
+            dataFraServer = "";
+            tidOgDato = "";
+            kommuniser = false;
+            TidIgjen = 45;
+            btnLukkDør.Enabled = false;
+            btnÅpneDør.Enabled = true;
+            dørÅpen = false;
+            tidDørÅpen = 0;
+            pinRiktig = false;
+            tast0 = false;
+            tast1 = false;
+            tast2 = false;
+            tast3 = false;
+            enHelMeldingMotatt = false;
+            KjortEnGang = false;
+            kortleserID = "1234";
+
+            tKortID[0] = "0000";
+            tKortID[1] = "1111";
+            tKortID[2] = "2222";
+            tKortID[3] = "3333";
+
+            tappetKort = false;
+        }
+
+        private void label2_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void backgroundWorker1_DoWork(object sender, System.ComponentModel.DoWorkEventArgs e)
+        {
+            // Utføres av en hjelpetråd når RunWorkerAsync-brukes
+
+            enMelding = "";
+
+            if (tappetKort)                                             //Hvis btnSettInnKort er trykket og umulig å trykke på
+            {
+                Thread.Sleep(1000);                                     //Thread.Sleep(1000) for å telle ned 1 sekund om gangen
+                TidIgjen--;                                             //Teller nedover
+            }
+
+            if (dørÅpen)                                                //Hvis dør åpen (bool) er true
+            {
+                Thread.Sleep(1000);                                     //Teller hvert sekund
+                tidDørÅpen++;                                           //Teller oppover
+            }
+            else
+            {
+                tidDørÅpen = 0;                                         //Hvis døren lukkes/ikke åpnes, blir tiden 0
+            }
+
+            while (kommuniser && !enHelMeldingMotatt)                   //Gjør at vi kontinuerlig kommuniserer med SimSim
+            {
+                data = data + MottaData(sp);                            //Legger til meldinger fra SimSim i stringen
+
+
+                if (DataInneholderEnHelMelding(data))                   //Sjekker at vi leser hele meldingen
+                {
+
+                    data = HenteUtEnMelding(data, ref enMelding);       //Henter ut meldingen
+
+                    enHelMeldingMotatt = true;                          //Gir oss en boolsk verdi for om meldingen er mottatt
+                }
+            }
+        }
+
+        private void backgroundWorker1_RunWorkerCompleted(object sender, System.ComponentModel.RunWorkerCompletedEventArgs e)
+        {
+
+            backgroundWorker1.RunWorkerAsync();                         //Gjør at nedtellingen fungerer kontinuerlig
+
+            if (tappetKort)                                             //Hvis btnSettInnKort er trykket
+            {
+                txtTid.Text = Convert.ToString(TidIgjen);               //Konventerer tid til tekst for å skrive det til tekstboksen
+                txtPinKode.Text = PIN;
+                if (TidIgjen <= 0)                                      //Hvis tiden er gått ut
+                {
+                    SendEnMelding(sp, "$O40");                          //Setter utgang til 0 at kortet ikke er tappet
+                    btnSettInnKort.Enabled = true;                      //Gjør det mulig å trykke på knappen igjen
+                    TidIgjen = 45;                                      //Setter tiden tilbake til 45 for nytt forsøk
+                    kommuniser = false;
+                    tappetKort = false;
+                    sp.Close();                                         //Lukker koblingen så ingenting går feil for neste bruker
+                }
+            }
+            else
+            {
+                txtTid.Text = "";                                       //Fjerner tiden fra nedtellings vinduet
+            }
+
+
+            if (tidDørÅpen >= 10)                                       //Hvis døren er åpen i mer ennn 10 sekunder vil alarmen gå
+            {
+                lbAlarmStatus.Items.Insert(0, "Dør vært åpen for lenge!");    //Legger til i alarmstatus at døren har vært åpen for lenge
+                tidDørÅpen = -1000000;                                        //Setter tiden langt ned slik at vi ikke får flere alarmer
+                SendEnMelding(sp, "$O71");                                    //Skriver til utgang i SimSim at alarmen har gått
+
+                tekstSomSkalSendes = "Alarm1" + "," + tidligerPIN + "," + tidligereKortID + "," + "2022-11-09 12:46:22" + "," + kortleserID + "," + dørNummer;     //Sender melding til Sentral
+                backgroundWorker2.RunWorkerAsync();                           //Starter bw2 for å sende meldingen
+            }
+
+            if (tast0)                                                  //Skriver til SimSim at vi tast 0 er trykket
+            {
+                SendEnMelding(sp, "$O01");
+                tast0 = false;
+                if (enHelMeldingMotatt) SendEnMelding(sp, "$O00");      //Setter den til 0 igjen etter motatt melding fra SimSim
+            }
+            if (tast1)                                                  // --:--
+            {
+                SendEnMelding(sp, "$O11");
+                tast1 = false;
+                if (enHelMeldingMotatt) SendEnMelding(sp, "$O10");
+            }
+            if (tast2)                                                  // --:--
+            {
+                SendEnMelding(sp, "$O21");
+                tast2 = false;
+                if (enHelMeldingMotatt) SendEnMelding(sp, "$O20");
+            }
+            if (tast3)                                                  // --:--
+            {
+                SendEnMelding(sp, "$O31");
+                tast3 = false;
+                if (enHelMeldingMotatt) SendEnMelding(sp, "$O30");
+            }
+        }
+        static Socket KobleTilServer(out bool ferdig)                           //Kobler oss til Sentral_C
+        {
+            ferdig = false;
+            Socket klientSokkel = new Socket(AddressFamily.InterNetwork,
+                SocketType.Stream,
+                ProtocolType.Tcp);
+
+            IPEndPoint serverEP = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 9050);
+
+            try
+            {
+                klientSokkel.Connect(serverEP); // blokkerende metode
+            }
+            catch (SocketException unntak)
+            {
+                ferdig = true;
+            }
+
+            return klientSokkel;
+        }
+
+        static string MottaTekst(Socket kommSokkel, out bool feilHarOppstått)           //Mottar tekst fra Sentral_C
+        {
+            string svar = "";
+            feilHarOppstått = false;
+
+            try
+            {
+                byte[] data = new byte[1024];
+                int antallBytesMottatt = kommSokkel.Receive(data);
+
+                if (antallBytesMottatt > 0) svar = Encoding.ASCII.GetString(data, 0, antallBytesMottatt);
+                else feilHarOppstått = true;
+            }
+            catch (Exception unntak)
+            {
+                MessageBox.Show("Feil: " + unntak.ToString());
+                feilHarOppstått = true;
+            }
+            return svar;
+        }
+
+        static void SendTekst(Socket kommSokkel, string tekstSomSkalSendes, out bool feilHarOppstått)           //Sender tekst til Sentral_C
+        {
+            feilHarOppstått = false;
+
+            try
+            {
+                byte[] data = Encoding.ASCII.GetBytes(tekstSomSkalSendes);
+                kommSokkel.Send(data, data.Length, SocketFlags.None);
+            }
+            catch (Exception unntak)
+            {
+                MessageBox.Show("Feil: " + unntak.ToString());
+                feilHarOppstått = true;
+            }
+        }
+
+        void OppdaterSeriellePorter()                                               //Oppdatrer serielle porter som vi kan velge mellom
+        {
+            string[] allePorter = SerialPort.GetPortNames();
+            for (int i = 0; i < allePorter.Length; i++)
+            {
+                cbSeriellePorter.Items.Add(allePorter[i]);
+            }
+            if (cbSeriellePorter.Items.Count > 0)
+            {
+                cbSeriellePorter.SelectedIndex = 0;
+            }
+        }
+
+        void SeriellPortKommunikasjon(object o)
+        {
+
+            string comPort = o as string;
+
+
+        }
+
+        static string HenteUtEnMelding(string data, ref string enMelding)
+        {
+            int posStart = data.IndexOf('$');                                               //Alle meldingene starter med $
+            int posSlutt = data.IndexOf('#');                                               //Alle meldinge slutter med #
+
+            enMelding = data.Substring(posStart, (posSlutt - posStart) + 1);                //Klipper ut meldingen mellom start og slutt, så vi ikke får uønsket melding med 
+
+            if (posStart > 0) data = data.Substring(posStart);                              // Klipper vekk eventuelle tegn før $
+
+            if (enMelding.Length < data.Length) data = data.Substring(posSlutt + 1);        // Bevarer til senere bruk eventuelle tegn etter #
+            else data = "";
+            return data;
+        }
+
+        static bool DataInneholderEnHelMelding(string data)
+        {
+            bool svar = false;                                                               //En boolsk variabel for å indikere om hele meldingen er motatt
+
+            int posStart = data.IndexOf('$');
+            int posSlutt = data.IndexOf('#');
+            if (posStart != -1 && posSlutt != -1)                                           //Sjekker at både start og slutt tegnet er med i meldingen
+            {
+                if (posStart < posSlutt)                                                    //Hvis posStart er mindre en posSlutt vil det si at vi ikke har begynt å lese meldingen midt inni
+                {
+                    svar = true;
+                }
+            }
+            return svar;                                                                    //Retunerer svaret om vi har lest hele meldingen eller ikke
+        }
+
+        static string MottaData(SerialPort sp)
+        {
+            string svar = "";                                                               //String vi ønsker å retunere fra metoden
+            try
+            {
+                svar = sp.ReadExisting();                                                   //Leser filen vi har åpnet fra SerialPort
+            }
+            catch (Exception unntak)
+            {
+
+            }
+            return svar;
+        }
+
+        static void SendEnMelding(SerialPort s, string melding)
+        {
+            try
+            {
+                s.Write(melding);                                                           //Skriver melding til serieporten i try catch
+            }
+            catch (Exception unntak)
+            {
+
+            }
+        }
+
+        private void Form1_Load(object sender, EventArgs e)
+        {
+            backgroundWorker1.RunWorkerAsync();                         //Starter bw1 for å starte telling og andre aksjoner
+
+            klientSokkel = KobleTilServer(out ferdig);                  //Kobler oss til Sentral_C med engang vi starter
+            if (ferdig)
+            {
+                lbFeilMeldinger.Items.Insert(0, "Feil har skjedd i mottak av tekst");       //Legger til feilmelding om noe får galt
+            }
+            if (!ferdig)
+            {
+                string velkomstmelding = MottaTekst(klientSokkel, out ferdig);
+                if (ferdig) Application.Exit();
+                else
+                {
+                    lbFeilMeldinger.Items.Insert(0, velkomstmelding);               //Sier ifra at vi har fått kontakt
+                }
+            }
+        }
+
+        private void btnSettInnKort_Click(object sender, EventArgs e)
+        {
+            ferdig = false;
+
+            kjøringer++;                                                //Legger til kjøringer som gjør vi kan lagre tidligere dataer
+
+            lKortID.Add("test");                                        //Legger til i kjøring 0
+            lPIN.Add("test");                                           //Legger til i kjøring 0
+
+            btnSettInnKort.Enabled = false;                             //Gjør det umulig å trykke på nye tapping av kort
+            tappetKort = true;                                          //Boolsk verdi for å utføre beregninger senere
+
+            txtKortID.Text = tKortID[r.Next(0, 4)];                     //Viser kort ID i tekstfeltet
+            kortID = txtKortID.Text;                                    //Lagrer verdien
+
+            lKortID.Add(kortID);                                        //Lagrer det i liste itilfelle vi trenger den senere
+            lbDørStatus.Items.Insert(0, kortID + " ønsker tilgang");    //Viser brukergrensesnittet nåværende og tidligere kortID forespørsler
+
+            tidligereKortID = lKortID[kjøringer];                       //Slik vi kan sende den til Sentral_C om nødvendig (kun med alarmer)
+
+            if (cbSeriellePorter.SelectedIndex >= 0)                    //Kobler oss til porten vår
+            {
+                string comPort = cbSeriellePorter.SelectedItem.ToString();
+                kommuniser = true;
+
+                sp = new SerialPort(comPort, 9600);
+
+                try
+                {
+                    sp.Open();
+                }
+                catch (Exception unntak)
+                {
+
+                }
+
+                if (sp.IsOpen)
+                {
+                    SendEnMelding(sp, "$S001");                     //Endre tidsintervallet til 1 sek
+                    Thread.Sleep(200);
+                    SendEnMelding(sp, "$O41");                      //Skrur på utgang 4 siden kortet er tappet
+                    Thread.Sleep(200);
+                    SendEnMelding(sp, "$O70");                      //Skrur av alarm utgang
+                    Thread.Sleep(200);
+                    SendEnMelding(sp, "$O51");                      //Skrur på at døren er låst
+                    Thread.Sleep(200);
+                    SendEnMelding(sp, "$O00");                      //Skrur av utgang 0
+                    Thread.Sleep(200);
+                    SendEnMelding(sp, "$O10");                      //Skrur av utgang 1
+                    Thread.Sleep(200);
+                    SendEnMelding(sp, "$O20");                      //Skrur av utgang 2
+                    Thread.Sleep(200);
+                    SendEnMelding(sp, "$O30");                      //Skrur av utgang 3
+                }
+            }
+        }
+
+        private void btnÅpneDør_Click_1(object sender, EventArgs e)
+        {
+            if (pinRiktig)                                          //Hvis Pin er riktig (boolsk verdi)
+            {
+                lbDørStatus.Items.Insert(0, "Dør åpnet");           //Skriver til Dørstatus at døren er åpnet
+                SendEnMelding(sp, "$O61");                          //Skriver til SimSim at døren er åpen
+
+                txtPinKode.Text = "";
+                btnÅpneDør.Enabled = false;                         //Gjør det umulig å trykke på ÅpneDør igjen før den er lukket
+                btnLukkDør.Enabled = true;                          //Gjør det mulig å trykke på Lukk dør knappen
+                dørÅpen = true;                                     //Boolsk verdi for å telle tiden den er åpen
+                pinRiktig = false;                                  //Setter boolsk verdi til false igjen for neste bruker
+            }
+            else
+            {
+                if (cbSeriellePorter.SelectedIndex >= 0)
+                {
+                    string comPort = cbSeriellePorter.SelectedItem.ToString();
+                    kommuniser = true;
+
+                    sp = new SerialPort(comPort, 9600);
+
+                    try
+                    {
+                        sp.Open();
+                    }
+                    catch (Exception unntak)
+                    {
+
+                    }
+                }
+                lbAlarmStatus.Items.Insert(0, "Dør brutt opp!");    //Hvis døren er åpnet uten pin er den brøtet opp
+                SendEnMelding(sp, "$O71");                          //Skriver alarm til SimSim
+                SendEnMelding(sp, "$O50");                          //dør ulåst
+                SendEnMelding(sp, "$O61");                          //dør åpen
+                SendEnMelding(sp, "$F600");                         //Skriver til potensiometeret at døren er brutt opp
+
+
+                //tidligerPIN = lPIN[kjøringer];                      //Skriver tidligere PIN siden ingen ny er tastet inn
+
+
+                tekstSomSkalSendes = "Alarm2" + "," + "0000" + "," + "0000" + "," + "2022-11-09 12:46:22" + "," + kortleserID + "," + dørNummer;
+
+                backgroundWorker2.RunWorkerAsync();                 //Starter bw2 for å sende melding til Sentral_C med TPC
+
+
+                btnÅpneDør.Enabled = false;
+                btnLukkDør.Enabled = true;                          //Gjør det mulig å lukke døren igjen
+                dørÅpen = true;                                     //Boolsk variabel for å telle tiden døren er åpen
+            }
+        }
+
+
+        private void btn0_Click(object sender, EventArgs e)
+        {
+            PIN = PIN + "0";                                        //Skriver til PIN vinduet hva vi har tastet
+            tast0 = true;                                           //Boolsk variabel for å sende melding til SimSim at denne tasten er trykket
+
+            SendEnMelding(sp, "$O01");
+            Thread.Sleep(200);
+        }
+
+        private void btn1_Click(object sender, EventArgs e)         // --..--
+        {
+            PIN = PIN + "1";
+            tast1 = true;
+
+            SendEnMelding(sp, "$O11");
+            Thread.Sleep(200);
+        }
+
+        private void btn2_Click(object sender, EventArgs e)        // --..--
+        {
+            PIN = PIN + "2";
+            tast2 = true;
+
+            SendEnMelding(sp, "$O21");
+            Thread.Sleep(200);
+        }
+
+        private void btn3_Click(object sender, EventArgs e)       // --..--
+        {
+            PIN = PIN + "3";
+            tast3 = true;
+
+            SendEnMelding(sp, "$O31");
+            Thread.Sleep(200);
+        }
+
+        private void txtPinKode_TextChanged(object sender, EventArgs e)
+        {
+            if (txtPinKode.TextLength == 4)                                 //Hvis vi har skrevet 4 siffer, PIN er alltid dette
+            {
+                string dato = data.Substring(data.IndexOf('B') + 1, 8);     //trekker ut datoen fra data
+                string tid = data.Substring(data.IndexOf('C') + 1, 6);      //Trekker ut tid fra data
+
+                string tid2 = string.Format("{0}:{1}:{2}", tid.Substring(0, 2), tid.Substring(2, 2), tid.Substring(4, 2));
+                string dato2 = string.Format("{0}-{1}-{2}", dato.Substring(0, 4), dato.Substring(4, 2), dato.Substring(6, 2));
+                tidOgDato = dato2 + " " + tid2;                              //Skriver de til Sentral_C
+                lPIN.Add(PIN);                                              //Legger PIN til i listet hvis vi trenger den senere
+                tekstSomSkalSendes = "Validering" + "," + PIN + "," + kortID + "," + tidOgDato + "," + kortleserID + "," + dørNummer;
+
+                backgroundWorker2.RunWorkerAsync();                         //Starter bw2 for å sende melding til Sentral_C med TPC
+
+            }
+        }
+        private void btnLukkDør_Click_1(object sender, EventArgs e)
+        {
+            lbDørStatus.Items.Insert(0, "Dør lukket");                          //Skriver i dørstatus at dørene er lukket
+            lbDørStatus.Items.Insert(0, "Dør låst");                            //Skriver i dørstatus at døren er låst
+            SendEnMelding(sp, "$O60");                                          //Sender melding til SimSim at døren er lukket
+            Thread.Sleep(200);
+            SendEnMelding(sp, "$O51");                                          //Sender melding til SimSim at døren er låst
+            Thread.Sleep(200);
+            SendEnMelding(sp, "$O40");                                          //Skriver melding til SimSim at kort ikke er tappet
+            Thread.Sleep(200);
+            SendEnMelding(sp, "$O70");                                          //Skriver melding til SimSim at alarmen er skrudd av
+
+            PIN = "";                                                           //Tømmer PIN for å være klar for neste bruker
+            btnLukkDør.Enabled = false;
+            btnSettInnKort.Enabled = true;
+            btnÅpneDør.Enabled = true;
+            dørÅpen = false;
+            TidIgjen = 45;                                                      //Gjør tiden klar for neste bruker
+            txtKortID.Text = "";                                                //Tømmer kortID feltet så den er klar for neste bruker
+
+            ferdig = true;
+
+            kommuniser = false;                                                 //Stopper kommunikasjonen
+            Thread.Sleep(500);
+            sp.Close();                                                         //Lukker kommSokkelen så vi er klar for en ny runde
+        }
+
+        private void txtTid_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void backgroundWorker2_DoWork(object sender, System.ComponentModel.DoWorkEventArgs e)
+        {
+            if (!ferdig)
+            {
+                SendTekst(klientSokkel, tekstSomSkalSendes, out ferdig);            //Sender tekst til Sentral_C
+            }
+
+            if (!ferdig)
+            {
+                dataFraServer = MottaTekst(klientSokkel, out ferdig);               //Mottar tekst fra Sentral_C
+            }
+        }
+
+        private void backgroundWorker2_RunWorkerCompleted(object sender, System.ComponentModel.RunWorkerCompletedEventArgs e)
+        {
+            // Arbeid som utføres av GUI-tråden når bwHjelpetråd_DoWork har avsluttet
+            if (!ferdig)
+            {
+                mottattTekst = dataFraServer;                                       //Når vi er ferdig med bw2_do_work kan vi lagre mottatt tekst
+                lbFeilMeldinger.Items.Insert(0, mottattTekst);
+            }
+            if (mottattTekst == "Gyldig")                                           //Hvis PIN er riktig
+            {
+                btnSettInnKort.Enabled = false;
+                btnÅpneDør.Enabled = true;
+                pinRiktig = true;
+                PIN = "";
+                lbDørStatus.Items.Insert(0, "Gyldig PIN");
+                lbDørStatus.Items.Insert(0, "Dør låst opp");
+                SendEnMelding(sp, "$O50");                              //Skriver til SimSim at døren er ulåst
+                Thread.Sleep(200);
+                tappetKort = false;
+            }
+            if (mottattTekst == "Ugyldig")
+            {
+                SendEnMelding(sp, "$O40");                          //Setter utgang til 0 at kortet ikke er tappet
+                btnSettInnKort.Enabled = true;                      //Gjør det mulig å trykke på knappen igjen
+                TidIgjen = 45;                                      //Setter tiden tilbake til 45 for nytt forsøk                      
+                txtPinKode.Text = "";
+                PIN = "";
+                lbDørStatus.Items.Insert(0, "Ugyldig PIN");
+                tappetKort = false;
+                kommuniser = false;
+                sp.Close();                                         //Lukker koblingen så ingenting går feil for neste bruker
+            }
+
+        }
+
+        private void txtKortID_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+using Npgsql;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+
+class Semesteroppgave_Sentral_rev1
+{
+    //static class splittetTekst
+    //{
+    //    public static string[] a = new string[50];
+    //}
+
+    public static void Main()
+    {
+        Socket lytteSokkel = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        IPEndPoint serverEP = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 9050);
+        lytteSokkel.Bind(serverEP);
+        lytteSokkel.Listen(10);
+
+        //Tilkoblingsparametere til PostgreSQL database
+        var cs = "Host=20.56.240.122;Username=h591452;Password=123456pass;Database=h591452";
+
+        //Bruke tilkoblingsparameterene til å opprette en forbindelse
+        using var con = new NpgsqlConnection(cs);
+        con.Open();
+
+        //Opprette "spørreobjekt"
+        using var cmd = new NpgsqlCommand();
+        cmd.Connection = con;
+
+        //Socket lytteSokkel = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        //IPEndPoint serverEP = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 9050);
+        //lytteSokkel.Bind(serverEP);
+        //lytteSokkel.Listen(10);
+
+        //deklarer en variabel som husker funksjonsvalg så det ikke kjøres om og om igjen
+        bool funksjonvalghusker = false;
+        int funksjonvalg = 0;
+
+
+
+
+
+        // Server aktivitet
+
+        if (!funksjonvalghusker)
+        {
+            //Funksjon valg
+
+
+            Console.WriteLine("/////////////////////////////////////////////////////////////////////////////////////////////");
+            Console.WriteLine("Velg funksjon 1 for sentral og 2 for å endre i database");
+            Console.WriteLine("Dette valget får du kun 1 gang. Start programmet sentral på nytt for å få dette valget pånytt");
+            Console.Write("Skriv inn ønsket funksjon valg:");
+            funksjonvalg = Convert.ToInt32(Console.ReadLine());
+        }
+        if (funksjonvalg == 2)
+        {
+            int endredatavalg = 0;
+            Console.WriteLine();
+            Console.Write("Velg mellom å gjøre endringer på data i databasen ved å trykke 1 eller trykk 2 for å velge rapport generering:");
+            endredatavalg = Convert.ToInt32(Console.ReadLine());
+
+            //Endre data i databasen
+            if (endredatavalg == 1)
+            {
+                int brukervalg = 0;
+                string[] spoorringTilDB = new string[20];
+                Console.WriteLine();
+                Console.WriteLine("Tast 1 for å Legge til ny brukerinformasjon, tast 2 for å endre brukerinformasjon, tast 3 for å slette bruker informasjon,");
+                Console.Write("tast 4 for å Legge til ny kortleser informasjon, tast 5 for å endre kortleser informasjon, tast 6 for å slette kortleser informasjon: ");
+                brukervalg = Convert.ToInt32(Console.ReadLine());
+                if (brukervalg == 1)
+                {
+                    //ber bruker fylle inn data som sendes til db
+                    Console.WriteLine();
+                    Console.WriteLine("Du vil nå bli bedt om å fylle inn dataen du vil legge til i databasen");
+                    Console.Write("Fyll inn kortID: ");
+                    spoorringTilDB[0] = Console.ReadLine();
+                    Console.Write("Fyll inn pinkode: ");
+                    spoorringTilDB[7] = Console.ReadLine();
+                    Console.Write("Fyll inn etternavn til bruker som legges til: ");
+                    spoorringTilDB[1] = Console.ReadLine();
+
+                    Console.Write("Fyll inn fornavn til bruker som legges til: ");
+                    spoorringTilDB[2] = Console.ReadLine();
+
+                    Console.Write("Fyll inn Epost: ");
+                    spoorringTilDB[3] = Console.ReadLine();
+
+                    Console.Write("Velg glydighetsperiode tast true for default(kortet er aktivt til det endres) eller tast false for å angi gyldighets periode: ");
+                    spoorringTilDB[4] = Console.ReadLine();
+
+                    if (spoorringTilDB[4] == "true")
+                    {
+                        spoorringTilDB[5] = "2025-01-01 01:01:01";
+                        spoorringTilDB[6] = "2025-01-01 01:01:01";
+                    }
+                    else if (spoorringTilDB[4] == "false")
+                    {
+                        Console.WriteLine("Angi start og slutt for gyldighetsperiode i formatet YYYY-MM-DD HH:MI:SS");
+                        Console.Write("Fyll inn start dato og tid: ");
+                        spoorringTilDB[5] = Console.ReadLine();
+
+                        Console.Write("Fyll inn slutt dato og tid: ");
+                        spoorringTilDB[6] = Console.ReadLine();
+                    }
+                    cmd.CommandText = string.Format("insert into Administrasjon values ('{0}', '{1}', '{2}', '{3}', {4}, '{5}', '{6}', '{7}');",
+                        spoorringTilDB[0], spoorringTilDB[1], spoorringTilDB[2], spoorringTilDB[3], spoorringTilDB[4], spoorringTilDB[5], spoorringTilDB[6], spoorringTilDB[7]); //0 = KortId, 1 = Etternavn, 2 = Fornavn, 3 = Epost, 4 = gyldighetdefault(true for default false for å agni periode), 5 = gyldighetstart, 6 = gyldighets slutt, 7 = pinkode
+                    cmd.ExecuteNonQuery();
+                    Console.WriteLine("Veridene er fylt inn i databasen");
+                }
+                else if (brukervalg == 2)
+                {
+                    int oppdateringvalg;
+                    Console.Write("Oppgi Kortid til Kort du vil oppdatere bruker info for");
+                    string kortid = Console.ReadLine();
+                    Console.Write("Oppgi Kolonne du ønsker å oppdatere :Tast 1 for Kort_Id, 2 for Etternavn, 3 for Fornavn, 4 for Epost_adresse," +
+                        " 5 for GyldighetsIntervall_default, 6 for GyldighetsIntervall_start, 7 for GyldighetsIntervall_slutt eller 8 for alle: ");
+                    oppdateringvalg = Convert.ToInt32(Console.ReadLine());
+                    bool returnfalse = false;
+
+                    while (!returnfalse)
+                    {
+                        switch (oppdateringvalg)
+                        {
+                            case 0:
+                                Console.Write("Oppgi Kolonne du ønsker å oppdatere :Tast 1 for Kort_Id, 2 for Etternavn, 3 for Fornavn, 4 for Epost_adresse," +
+                                    " 5 for GyldighetsIntervall_default, 6 for GyldighetsIntervall_start, 7 for GyldighetsIntervall_slutt eller 8 for alle");
+                                oppdateringvalg = Convert.ToInt32(Console.ReadLine());
+                                break;
+                            case 1:
+                                Console.Write("Oppgi ny Kortid(format eks 0000): ");
+                                string nykortid = Console.ReadLine();
+                                cmd.CommandText = String.Format("update Administrasjon set Kort_ID = '{0}' where Kort_ID = '{1}';", nykortid, kortid);
+                                cmd.ExecuteNonQuery();
+                                Console.WriteLine("Veridene er oppdater i databasen");
+
+                                Console.Write("Oppgi Kolonne du ønsker å oppdatere eller tast 9 for å avslutte:Tast 1 for Kort_Id, 2 for Etternavn, 3 for Fornavn, 4 for Epost_adresse," +
+                                          " 5 for GyldighetsIntervall_default, 6 for GyldighetsIntervall_start, 7 for GyldighetsIntervall_slutt eller 8 for alle: ");
+                                oppdateringvalg = Convert.ToInt32(Console.ReadLine());
+
+                                break;
+                            case 2:
+                                Console.Write("Oppgi nytt Etternavn: ");
+                                string nyetternavn = Console.ReadLine();
+                                cmd.CommandText = String.Format("update Administrasjon set Etternavn = '{0}' where Kort_ID = '{1}';", nyetternavn, kortid);
+                                cmd.ExecuteNonQuery();
+                                Console.WriteLine("Veridene er oppdater i databasen");
+
+                                Console.Write("Oppgi Kolonne du ønsker å oppdatere eller tast 9 for å avslutte:Tast 1 for Kort_Id, 2 for Etternavn, 3 for Fornavn, 4 for Epost_adresse," +
+                                          " 5 for GyldighetsIntervall_default, 6 for GyldighetsIntervall_start, 7 for GyldighetsIntervall_slutt eller 8 for alle: ");
+                                oppdateringvalg = Convert.ToInt32(Console.ReadLine());
+
+                                break;
+                            case 3:
+                                Console.Write("Oppgi nytt fornavn: ");
+                                string nyfornavn = Console.ReadLine();
+                                cmd.CommandText = String.Format("update Administrasjon set Fornavn = '{0}' where Kort_ID = '{1}';", nyfornavn, kortid);
+                                cmd.ExecuteNonQuery();
+                                Console.WriteLine("Veridene er oppdater i databasen");
+
+                                Console.Write("Oppgi Kolonne du ønsker å oppdatere eller tast 9 for å avslutte:Tast 1 for Kort_Id, 2 for Etternavn, 3 for Fornavn, 4 for Epost_adresse," +
+                                          " 5 for GyldighetsIntervall_default, 6 for GyldighetsIntervall_start, 7 for GyldighetsIntervall_slutt eller 8 for alle: ");
+                                oppdateringvalg = Convert.ToInt32(Console.ReadLine());
+
+                                break;
+                            case 4:
+                                Console.Write("Oppgi ny epost adresse(format eks epost@gmail.com): ");
+                                string nyepost = Console.ReadLine();
+                                cmd.CommandText = String.Format("update Administrasjon set Epost_adresse = '{0}' where Kort_ID = '{1}';", nyepost, kortid);
+                                cmd.ExecuteNonQuery();
+                                Console.WriteLine("Veridene er oppdater i databasen");
+
+                                Console.Write("Oppgi Kolonne du ønsker å oppdatere eller tast 9 for å avslutte:Tast 1 for Kort_Id, 2 for Etternavn, 3 for Fornavn, 4 for Epost_adresse," +
+                                          " 5 for GyldighetsIntervall_default, 6 for GyldighetsIntervall_start, 7 for GyldighetsIntervall_slutt eller 8 for alle: ");
+                                oppdateringvalg = Convert.ToInt32(Console.ReadLine());
+
+                                break;
+                            case 5:
+                                Console.Write("Oppgi false hvis du vil angi kortets gyldighets periode eller true for default(gyldig uendelig): ");
+                                string nygyldigdefault = Console.ReadLine();
+                                cmd.CommandText = String.Format("update Administrasjon set GyldighetsIntervall_default = {0} where Kort_ID = '{1}';", nygyldigdefault, kortid);
+                                cmd.ExecuteNonQuery();
+                                Console.WriteLine("Veridene er oppdater i databasen");
+
+                                Console.Write("Oppgi Kolonne du ønsker å oppdatere eller tast 9 for å avslutte:Tast 1 for Kort_Id, 2 for Etternavn, 3 for Fornavn, 4 for Epost_adresse," +
+                                          " 5 for GyldighetsIntervall_default, 6 for GyldighetsIntervall_start, 7 for GyldighetsIntervall_slutt eller 8 for alle: ");
+                                oppdateringvalg = Convert.ToInt32(Console.ReadLine());
+
+                                break;
+                            case 6:
+                                Console.Write("Oppgi ny start dato for gyldighets periode(format eks YYYY-MM-DD HH:MI:SS): ");
+                                string nygyldigstart = Console.ReadLine();
+                                cmd.CommandText = String.Format("update Administrasjon set GyldighetsIntervall_start = '{0}' where Kort_ID = '{1}';", nygyldigstart, kortid);
+                                cmd.ExecuteNonQuery();
+                                Console.WriteLine("Veridene er oppdater i databasen");
+
+                                Console.Write("Oppgi Kolonne du ønsker å oppdatere eller tast 9 for å avslutte:Tast 1 for Kort_Id, 2 for Etternavn, 3 for Fornavn, 4 for Epost_adresse," +
+                                          " 5 for GyldighetsIntervall_default, 6 for GyldighetsIntervall_start, 7 for GyldighetsIntervall_slutt eller 8 for alle: ");
+                                oppdateringvalg = Convert.ToInt32(Console.ReadLine());
+
+                                break;
+                            case 7:
+                                Console.Write("Oppgi ny slutt dato for gyldighets periode(format eks YYYY-MM-DD HH:MI:SS): ");
+                                string nygyldigslutt = Console.ReadLine();
+                                cmd.CommandText = String.Format("update Administrasjon set GyldighetsIntervall_slutt = '{0}' where Kort_ID = '{1}';", nygyldigslutt, kortid);
+                                cmd.ExecuteNonQuery();
+                                Console.WriteLine("Veridene er oppdater i databasen");
+
+                                Console.Write("Oppgi Kolonne du ønsker å oppdatere eller tast 9 for å avslutte:Tast 1 for Kort_Id, 2 for Etternavn, 3 for Fornavn, 4 for Epost_adresse," +
+                                          " 5 for GyldighetsIntervall_default, 6 for GyldighetsIntervall_start, 7 for GyldighetsIntervall_slutt eller 8 for alle: ");
+                                oppdateringvalg = Convert.ToInt32(Console.ReadLine());
+
+                                break;
+                            case 8:
+                                //1
+                                Console.Write("Oppgi ny Kortid(format eks 0000): ");
+                                nykortid = Console.ReadLine();
+                                //2
+                                Console.Write("Oppgi nytt Etternavn: ");
+                                nyetternavn = Console.ReadLine();
+                                //3
+                                Console.Write("Oppgi nytt fornavn: ");
+                                nyfornavn = Console.ReadLine();
+                                //4
+                                Console.Write("Oppgi ny epost adresse(format eks epost@gmail.com): ");
+                                nyepost = Console.ReadLine();
+                                //5
+                                Console.Write("Oppgi 1 hvis kortet skal ha en gyldighets periode eller 0 for default(gyldig uendelig): ");
+                                nygyldigdefault = Console.ReadLine();
+                                //6
+                                Console.Write("Oppgi ny start dato for gyldighets periode(format eks YYYY-MM-DD HH:MI:SS): ");
+                                nygyldigstart = Console.ReadLine();
+                                //7
+                                Console.Write("Oppgi ny slutt dato for gyldighets periode(format eks YYYY-MM-DD HH:MI:SS): ");
+                                nygyldigslutt = Console.ReadLine();
+
+
+                                cmd.CommandText = String.Format("update Administrasjon set Kort_ID = '{0}', Etternavn = '{1}', Fornavn = {2}, Epost_adresse = '{3}', GyldighetsIntervall_defualt = {4}, GyldighetsIntervall_start = '{5}', GyldighetsIntervall_slutt{6}, Pin = '{7} where Kort_ID = '{8}';", nykortid, nyetternavn, nyfornavn, nyepost, nygyldigdefault, nygyldigstart, nygyldigslutt, kortid);
+                                cmd.ExecuteNonQuery();
+                                Console.WriteLine("Veridene er oppdater i databasen");
+
+                                Console.Write("Oppgi Kolonne du ønsker å oppdatere eller tast 9 for å avslutte:Tast 1 for Kort_Id, 2 for Etternavn, 3 for Fornavn, 4 for Epost_adresse," +
+                                          " 5 for GyldighetsIntervall_default, 6 for GyldighetsIntervall_start, 7 for GyldighetsIntervall_slutt eller 8 for alle");
+                                oppdateringvalg = Convert.ToInt32(Console.ReadLine());
+
+                                break;
+                            case 9:
+                                returnfalse = true;
+                                break;
+                        }
+                    }
+
+                }
+                //slette verdier fra database
+                else if (brukervalg == 3)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("NB!!! dette vil også slette kort id`en så den må legges inn manuelt pånytt hvis samme kort skal benyttes til en annen brukes:");
+                    Console.Write("Oppgi kort id knyttet til bruker du vil slette:");
+                    string kortid = Console.ReadLine();
+
+                    cmd.CommandText = String.Format("delete from Administrasjon where Kort_ID = '{0}';", kortid);
+                    cmd.ExecuteNonQuery();
+                    Console.WriteLine("Raden er slettet fra tabellen Administrasjon i databasen");
+                }
+
+                //legge til kortleser informasjon i db
+                else if (brukervalg == 4)
+                {
+                    //ber bruker fylle inn data som sendes til db
+                    Console.WriteLine();
+                    Console.WriteLine("Du vil nå bli bedt om å fylle inn dataen du vil legge til i databasen");
+                    Console.Write("Fyll inn kortleser ID: ");
+                    spoorringTilDB[0] = Console.ReadLine();
+                    Console.Write("Fyll inn plassering(dør merking eks. F103): ");
+                    spoorringTilDB[1] = Console.ReadLine();
+
+
+                    cmd.CommandText = string.Format("insert into Kortleser values ('{0}', '{1}');",
+                        spoorringTilDB[1], spoorringTilDB[0]); //0 = Kortleser_ID, 1 = Kortleser plassering
+                    cmd.ExecuteNonQuery();
+                    Console.WriteLine("Veridene er fylt inn i databasen");
+                }
+
+                else if (brukervalg == 5)
+                {
+                    int oppdateringvalg;
+                    Console.Write("Oppgi Kortleser ID til Kortleser du vil oppdatere info for");
+                    string kortleser_id = Console.ReadLine();
+                    Console.Write("Oppgi Kolonne du ønsker å oppdatere: Tast 1 for Plassering, 2 for Kortleser_ID eller 8 for alle: ");
+                    oppdateringvalg = Convert.ToInt32(Console.ReadLine());
+                    bool returnfalse = false;
+
+                    while (!returnfalse)
+                    {
+                        switch (oppdateringvalg)
+                        {
+                            case 0:
+                                Console.Write("Oppgi Kolonne du ønsker å oppdatere: Tast 1 for Plassering, 2 for Kortleser_ID eller 8 for alle: ");
+                                oppdateringvalg = Convert.ToInt32(Console.ReadLine());
+                                break;
+                            case 1:
+                                Console.Write("Oppgi ny Plassering(format eks f103): ");
+                                string nyplassering = Console.ReadLine();
+                                cmd.CommandText = String.Format("update Kortleser set Plassering = '{0}' where Kortleser_ID = '{1}';", nyplassering, kortleser_id);
+                                cmd.ExecuteNonQuery();
+                                Console.WriteLine("Veridene er oppdater i databasen");
+
+                                Console.Write("Oppgi Kolonne du ønsker å oppdatere: Tast 1 for Plassering, 2 for Kortleser_ID, 3 for begge eller 4 for å avslutte oppdatering: ");
+                                oppdateringvalg = Convert.ToInt32(Console.ReadLine());
+
+                                break;
+                            case 2:
+                                Console.Write("Oppgi ny Kortleser_ID: ");
+                                string nykortleserid = Console.ReadLine();
+                                cmd.CommandText = String.Format("update Kortleser set Kortleser_ID = '{0}' where Kortleser_ID = '{1}';", nykortleserid, kortleser_id);
+                                cmd.ExecuteNonQuery();
+                                Console.WriteLine("Veridene er oppdater i databasen");
+
+                                Console.Write("Oppgi Kolonne du ønsker å oppdatere: Tast 1 for Plassering, 2 for Kortleser_ID, 3 for begge eller 4 for å avslutte oppdatering: ");
+                                oppdateringvalg = Convert.ToInt32(Console.ReadLine());
+
+                                break;
+                            case 3:
+                                //1
+                                Console.Write("Oppgi ny plasser (eks format F103): ");
+                                nyplassering = Console.ReadLine();
+                                //2
+                                Console.Write("Oppgi ny Kortleser ID): ");
+                                nykortleserid = Console.ReadLine();
+
+
+                                cmd.CommandText = String.Format("update Kortleser set Plassering = '{0}', Kortleser_ID = '{1}';", nyplassering, nykortleserid);
+                                cmd.ExecuteNonQuery();
+                                Console.WriteLine("Veridene er oppdater i databasen");
+
+                                Console.Write("Oppgi Kolonne du ønsker å oppdatere: Tast 1 for Plassering, 2 for Kortleser_ID, 3 for begge eller 4 for å avslutte oppdatering: ");
+                                oppdateringvalg = Convert.ToInt32(Console.ReadLine());
+
+                                break;
+                            case 4:
+                                returnfalse = true;
+                                break;
+                        }
+                    }
+                }
+                else if (brukervalg == 6)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("NB!!! dette vil også slette kortleser id`en så den må legges inn manuelt pånytt hvis samme kortleser skal benyttes til en annen dør:");
+                    Console.Write("Oppgi kortleser id knyttet til dør du vil slette:");
+                    string kortleserid = Console.ReadLine();
+
+                    cmd.CommandText = String.Format("delete from Kortleser where Kortleser_ID = '{0}';", kortleserid);
+                    cmd.ExecuteNonQuery();
+                    Console.WriteLine("Raden er slettet fra tabellen Kortleser i databasen");
+                }
+            }
+
+            //gennerere rapporter
+            else if (endredatavalg == 2)
+            {
+                //deklarer variabler
+                int rapportvalg = 0;
+
+                //Funksjon valg
+                Console.WriteLine("");
+                Console.WriteLine("Tast 1 for å liste brukerdata basert på fornavn og etternavn, Tast 2 for å liste adgangslogg basert på Kort_ID og fra-til dato, Tast 3 for å liste alle innpasseringsforsøk for en dør med ikke godkjent adgang");
+                Console.Write("Tast 4 for å liste alle alarmer mellom 2 datoer og klokkeslett, Tast 5 for å liste første og siste adgang: ");
+                rapportvalg = Convert.ToInt32(Console.ReadLine());
+
+                //Generere rapporter
+                if (rapportvalg == 1)
+                {
+                    //liste brukerdata på grunnlag av brukernavn
+                    Console.Write("Oppgi etternavn på bruker: ");
+                    string etternavn = Console.ReadLine();
+                    Console.Write("Oppgi fornavn på bruker: ");
+                    string fornavn = Console.ReadLine();
+
+
+                    //Vi ønsker å lese ut det vi nettopp har lagt inn i databasen
+                    cmd.CommandText = String.Format("select * from Administrasjon where Etternavn = '{0}' and Fornavn = '{1}';", etternavn, fornavn);
+
+                    //Opprette ett "leseobjekt"
+                    using NpgsqlDataReader rdr = cmd.ExecuteReader();
+
+                    //Hente navn på kolonner
+                    Console.WriteLine($"{rdr.GetName(0),9} {rdr.GetName(1),-10} {rdr.GetName(2),-12} {rdr.GetName(3),-10} {rdr.GetName(4),-15} {rdr.GetName(5),7} {rdr.GetName(6),7} {rdr.GetName(7),7}");
+                    //Hente ut data for hver rad
+                    while (rdr.Read())
+                    {
+                        Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetString(2),-12} {rdr.GetString(3),-10} {rdr.GetBoolean(4),-15} {rdr.GetDateTime(5),7} {rdr.GetDateTime(6),7} {rdr.GetString(7),7}");
+                    }
+
+                }
+                else if (rapportvalg == 2)
+                {
+                    //liste adgangslogg inkludert forsøk på inngang på grunnlag av brukernavn og datoer fra - til
+                    Console.Write("Oppgi Kort ID knyttet til bruker du vil se passerings forsøk for: ");
+                    string kortid = Console.ReadLine();
+                    Console.Write("Oppgi nårtid du vil undersøke fra (format eks YYYY-MM-DD HH:MI:SS): ");
+                    string starttid = Console.ReadLine();
+                    Console.Write("Oppgi nårtid du vil undersøke til (format eks YYYY-MM-DD HH:MI:SS): ");
+                    string slutttid = Console.ReadLine();
+
+
+                    //Vi ønsker å lese ut det vi nettopp har lagt inn i databasen
+                    cmd.CommandText = String.Format("select * from Passering_forespørsel where Kort_ID = '{0}' and Passering_tid BETWEEN '{1}' AND '{2}';", kortid, starttid, slutttid);
+
+                    //Opprette ett "leseobjekt"
+                    using NpgsqlDataReader rdr = cmd.ExecuteReader();
+
+                    //Hente navn på kolonner
+                    Console.WriteLine($"{rdr.GetName(0),9} {rdr.GetName(1),-10} {rdr.GetName(2),-12} {rdr.GetName(3),-10}");
+                    //Hente ut data for hver rad
+                    while (rdr.Read())
+                    {
+                        Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetDateTime(2),-12} {rdr.GetBoolean(3),-10}");
+                    }
+
+                }
+                else if (rapportvalg == 3)
+                {
+                    //liste alle innpasseringsforsøk for en dør med ikke-godkjent adgang (uansett bruker)
+                    Console.Write("Oppgi KortLeser ID knyttet til dør du vil se passerings forsøk for: ");
+                    string kortleserid = Console.ReadLine();
+
+
+
+                    //Vi ønsker å lese ut det vi nettopp har lagt inn i databasen
+                    cmd.CommandText = String.Format("select * from Passering_forespørsel where Kortleser_ID = '{0}' and Passering_status = false;", kortleserid);
+
+                    //Opprette ett "leseobjekt"
+                    using NpgsqlDataReader rdr = cmd.ExecuteReader();
+
+                    //Hente navn på kolonner
+                    Console.WriteLine($"{rdr.GetName(0),9} {rdr.GetName(1),-10} {rdr.GetName(2),-12} {rdr.GetName(3),-10}");
+                    //Hente ut data for hver rad
+                    while (rdr.Read())
+                    {
+                        Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetDateTime(2),-12} {rdr.GetBoolean(3),-10}");
+                    }
+
+                }
+                else if (rapportvalg == 4)
+                {
+                    ////liste av alarmer mellom 2 datoer
+                    Console.Write("Oppgi nårtid du vil se alarmer fra (format eks YYYY-MM-DD HH:MI:SS): ");
+                    string starttid = Console.ReadLine();
+                    Console.Write("Oppgi nårtid du vil se alarmer til(format eks YYYY-MM-DD HH:MI:SS): ");
+                    string slutttid = Console.ReadLine();
+
+
+                    //Vi ønsker å lese ut det vi nettopp har lagt inn i databasen
+                    cmd.CommandText = String.Format("select * from Alarm where Tidspunkt BETWEEN '{0}' AND '{1}';", starttid, slutttid);
+
+                    //Opprette ett "leseobjekt"
+                    using NpgsqlDataReader rdr = cmd.ExecuteReader();
+
+                    //Hente navn på kolonner
+                    Console.WriteLine($"{rdr.GetName(0),9} {rdr.GetName(1),-10} {rdr.GetName(2),-12} {rdr.GetName(3),-10}");
+                    //Hente ut data for hver rad
+                    while (rdr.Read())
+                    {
+                        Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetDateTime(1),-10} {rdr.GetString(2),-12} {rdr.GetString(3),-10}");
+                    }
+
+                }
+                else if (rapportvalg == 5)
+                {
+
+                    ////for et rom: første og siste adgang (for dager døren har vært i bruk)
+                    //liste alle innpasseringsforsøk for en dør med ikke-godkjent adgang (uansett bruker)
+                    Console.Write("Oppgi KortLeser ID knyttet til dør du vil se første og siste brukstid for dagen: ");
+                    string kortleserid = Console.ReadLine();
+                    Console.Write("Oppgi dato du (format YYYY-MM-DD): ");
+                    string dato = Console.ReadLine();
+
+
+
+                    //Vi ønsker å lese ut det vi nettopp har lagt inn i databasen
+                    cmd.CommandText = String.Format("Select * from passering_forespørsel where kortleser_id = '{0}' and passering_tid = (select max(passering_tid)  from Passering_forespørsel where Kortleser_ID = '{0}') and passering_tid = '{1}';", kortleserid, dato);
+
+                    //Opprette ett "leseobjekt"
+                    using NpgsqlDataReader rdr = cmd.ExecuteReader();
+
+                    //Hente navn på kolonner
+                    Console.WriteLine($"{rdr.GetName(0),9} {rdr.GetName(1),-10} {rdr.GetName(2),-12} {rdr.GetName(3),-10}");
+                    //Hente ut data for hver rad
+                    while (rdr.Read())
+                    {
+                        Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetDateTime(2),-12} {rdr.GetBoolean(3),-10}");
+                    }
+
+                }
+
+
+            }
+
+            funksjonvalg = 1;
+        }
+
+        else if (funksjonvalg == 1)
+        {
+            while (true)
+            {
+                // Venter på sklienter
+                Console.WriteLine();
+                Console.WriteLine();
+                Console.WriteLine("Venter på en klient ...");
+                Socket kommSokkel = lytteSokkel.Accept(); // blokkerende metode
+
+                // Når en klient har tatt kontakt: info om kommunikasjon skrives ut
+                VisKommunikasjonsinfo(kommSokkel);
+
+                // Kommunikasjon med en klient fortsetter i en ny tråd
+                ThreadPool.QueueUserWorkItem(KommunikasjonMedEnKlient, kommSokkel);
+            }
+        }
+        funksjonvalghusker = true;
+
+    }
+
+    static void KommunikasjonMedEnKlient(object arg)
+    {
+        Socket kommSokkel = arg as Socket;
+
+        //Tilkoblingsparametere til PostgreSQL database
+        var cs = "Host=20.56.240.122;Username=h591452;Password=123456pass;Database=h591452";
+
+        //Bruke tilkoblingsparameterene til å opprette en forbindelse
+        using var con = new NpgsqlConnection(cs);
+        con.Open();
+
+        //Opprette "spørreobjekt"
+        using var cmd = new NpgsqlCommand();
+        cmd.Connection = con;
+
+        string mottattTekst = "";
+        string tekstSomSkalSendes;
+
+        bool ferdig = false;
+
+
+        string hilsen = "Velkommen til semesteroppgave";
+        SendTekst(kommSokkel, hilsen, out ferdig);
+
+        while (!ferdig)
+        {
+            // Motta data fra en klient 
+            mottattTekst = MottaTekst(kommSokkel, out ferdig);
+            if (!ferdig)
+            {
+                string[] splittetTekst = mottattTekst.Split(',');
+                //Motta forespørsel fra kortleser om validering
+                if (splittetTekst[0] == "Validering")
+                {
+                    cmd.CommandText = string.Format("SELECT COUNT(*) from Administrasjon where Kort_ID = '{0}' AND Pin = '{1}';", splittetTekst[2], splittetTekst[1]);
+                    //Opprette ett "leseobjekt"
+                    using NpgsqlDataReader rdr = cmd.ExecuteReader();
+                    rdr.Read();
+                    int i = rdr.GetInt32(0);
+                    rdr.Close();
+
+                    //så valider at pinkode og KortId eksisterer i tabellen administrasjon
+                    //if(Antall forekomster av KortID og pinKode > 1) dette vil gi ut antall ganger kortid og pinkode forkommer i tabellen som hvis er enter mer enn 0 så er forespørselen validert
+                    if (i > 0)
+                    {
+                        //Sende svar til klient at valdiering ble godkjent
+                        SendTekst(kommSokkel, "Gyldig", out ferdig);
+
+                        //lagrer passering forespørselen i tabell Passering_forespørsel
+                        cmd.CommandText = string.Format("insert into Passering_forespørsel values ('{0}', '{1}', '{2}', true);", splittetTekst[4], splittetTekst[2], splittetTekst[3]); //tar høyde for at Primary key er inkremental
+                        cmd.ExecuteNonQuery();
+                        Console.WriteLine("Validerings forespørsel fra kortleser:{0} med kort id {1} Godkjent", splittetTekst[4], splittetTekst[2]);
+                    }
+                    if(i < 0) //else ikke godkjent validering
+                    {
+                        //Sende svar til klient at valdiering ikke ble godkjent
+                        SendTekst(kommSokkel, "Ugyldig", out ferdig);
+
+                        //lagrer passering forespørselen i tabell Passering_forespørsel
+                        cmd.CommandText = string.Format("insert into Passering_forespørsel values ('{0}', '{1}', '{2}', false);", splittetTekst[4], splittetTekst[2], splittetTekst[3]); //tar høyde for at Primary key er inkremental
+                        cmd.ExecuteNonQuery();
+
+                        Console.WriteLine("Validerings forespørsel fra kortleser: {0} med kort id {1} ikke godkjent", splittetTekst[4], splittetTekst[2]);
+                    }
+                    Console.ReadKey(true);
+                }
+
+
+                //motta alarm skrive ut melding i konsoll og sende data til databasen
+                if (splittetTekst[0] == "Alarm1")
+                {
+                    Console.WriteLine("ALARM dør {0} åpen for lenge. Melding mottatt: {1}, siste KortID benyttet: {2}", splittetTekst[5], splittetTekst[3], splittetTekst[2]);
+                    cmd.CommandText = string.Format("insert into Alarm values ('{0}', '{1}', '{2}', '{3}');", splittetTekst[0], splittetTekst[3], splittetTekst[4], splittetTekst[2]); //tar høyde for at Primary key er inkremental
+                    cmd.ExecuteNonQuery();
+                }
+                if (splittetTekst[0] == "Alarm2")
+                {
+                    Console.WriteLine("ALARM dør {0} har blit brutt. Melding mottatt: {1}, siste KortID benyttet: {2}", splittetTekst[1], splittetTekst[2], splittetTekst[3]);
+                    cmd.CommandText = string.Format("insert into Alarm values ('{0}', '{1}', '{2}', '{3}');", splittetTekst[0], splittetTekst[3], splittetTekst[4], splittetTekst[2]); //tar høyde for at Primary key er inkremental
+                    cmd.ExecuteNonQuery();
+                }
+
+            }
+
+        }
+
+        // Lukker kommunikasjonssokkel og viser info
+        IPEndPoint klientEP = kommSokkel.RemoteEndPoint as IPEndPoint;
+        Console.WriteLine("Forbindelsen med {0}:{1} er brutt", klientEP.Address, klientEP.Port);
+        kommSokkel.Close();
+
+    }
+
+
+    static string MottaTekst(Socket kommSokkel, out bool feilHarOppstått)
+    {
+        string svar = "";
+        feilHarOppstått = false;
+
+        try
+        {
+            byte[] data = new byte[1024];
+            int antallBytesMottatt = kommSokkel.Receive(data);
+
+            if (antallBytesMottatt > 0) svar = Encoding.ASCII.GetString(data, 0, antallBytesMottatt);
+            else feilHarOppstått = true;
+        }
+        catch (Exception unntak)
+        {
+            Console.WriteLine("Feil: " + unntak.Message);
+            feilHarOppstått = true;
+        }
+        return svar;
+    }
+
+    static void SendTekst(Socket kommSokkel, string tekstSomSkalSendes, out bool feilHarOppstått)
+    {
+        feilHarOppstått = false;
+
+        try
+        {
+            byte[] data = Encoding.ASCII.GetBytes(tekstSomSkalSendes);
+            kommSokkel.Send(data, data.Length, SocketFlags.None);
+        }
+        catch (Exception unntak)
+        {
+            Console.WriteLine("Feil: " + unntak.Message);
+            feilHarOppstått = true;
+        }
+    }
+    //usikker på om blir brukt
+    static void VisKommunikasjonsinfo(Socket s)
+    {
+        IPEndPoint klientEP = s.RemoteEndPoint as IPEndPoint;
+        IPEndPoint serverEP = s.LocalEndPoint as IPEndPoint;
+        Console.WriteLine("Kommunikasjon med klient: {0}:{1}", klientEP.Address, klientEP.Port);
+        Console.WriteLine("Server bruker {0}:{1}", serverEP.Address, serverEP.Port);
+    }
+}
+
+
+
