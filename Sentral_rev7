@@ -3,7 +3,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 
-
 class Semesteroppgave_Sentral_rev1
 {
     //static class splittetTekst
@@ -388,7 +387,7 @@ class Semesteroppgave_Sentral_rev1
                         //Hente ut data for hver rad
                         while (rdr.Read())
                         {
-                            Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetString(2),-12} {rdr.GetString(3),-10} {rdr.GetBoolean(4),-15} {rdr.GetTimeStamp(5),7} {rdr.GetTimeStamp(6),7} {rdr.GetString(7),7}");
+                            Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetString(2),-12} {rdr.GetString(3),-10} {rdr.GetBoolean(4),-15} {rdr.GetDateTime(5),7} {rdr.GetDateTime(6),7} {rdr.GetString(7),7}");
                         }
 
                     }
@@ -414,8 +413,9 @@ class Semesteroppgave_Sentral_rev1
                         //Hente ut data for hver rad
                         while (rdr.Read())
                         {
-                            Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetTimeStamp(2),-12} {rdr.GetBoolean(3),-10}");
+                            Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetDateTime(2),-12} {rdr.GetBoolean(3),-10}");
                         }
+                        
                     }
                     else if (rapportvalg == 3)
                     {
@@ -436,7 +436,7 @@ class Semesteroppgave_Sentral_rev1
                         //Hente ut data for hver rad
                         while (rdr.Read())
                         {
-                            Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetTimeStamp(2),-12} {rdr.GetBoolean(3),-10}");
+                            Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetDateTime(2),-12} {rdr.GetBoolean(3),-10}");
                         }
 
                     }
@@ -460,7 +460,7 @@ class Semesteroppgave_Sentral_rev1
                         //Hente ut data for hver rad
                         while (rdr.Read())
                         {
-                            Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetTimeStamp(1),-10} {rdr.GetString(2),-12} {rdr.GetString(3),-10}");
+                            Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetDateTime(1),-10} {rdr.GetString(2),-12} {rdr.GetString(3),-10}");
                         }
 
                     }
@@ -489,9 +489,9 @@ class Semesteroppgave_Sentral_rev1
                         {
                             Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetDateTime(2),-12} {rdr.GetBoolean(3),-10}");
                         }
-                        
+
                     }
-                    
+
 
                 }
 
@@ -575,7 +575,7 @@ class Semesteroppgave_Sentral_rev1
                         SendTekst(kommSokkel, "Ugyldig", out ferdig);
 
                         //lagrer passering forespørselen i tabell Passering_forespørsel
-                        cmd.CommandText = string.Format("insert into Passering_forespørsel values ('{0}', '{1}', '{2}', 0);", splittetTekst[4], splittetTekst[2], splittetTekst[3]); //tar høyde for at Primary key er inkremental
+                        cmd.CommandText = string.Format("insert into Passering_forespørsel values ('{0}', '{1}', '{2}', false);", splittetTekst[4], splittetTekst[2], splittetTekst[3]); //tar høyde for at Primary key er inkremental
                         cmd.ExecuteNonQuery();
 
                         Console.WriteLine("Validerings forespørsel fra kortleser: {0} med kort id {1} ikke godkjent", splittetTekst[4], splittetTekst[2]);
