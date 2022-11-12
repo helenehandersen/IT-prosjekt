@@ -388,7 +388,7 @@ class Semesteroppgave_Sentral_rev1
                         //Hente ut data for hver rad
                         while (rdr.Read())
                         {
-                            Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetString(2),-12} {rdr.GetString(3),-10} {rdr.GetBoolean(4),-15} {rdr.GetDate(5),7} {rdr.GetDate(6),7} {rdr.GetString(7),7}");
+                            Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetString(2),-12} {rdr.GetString(3),-10} {rdr.GetBoolean(4),-15} {rdr.GetTimeStamp(5),7} {rdr.GetTimeStamp(6),7} {rdr.GetString(7),7}");
                         }
 
                     }
@@ -410,11 +410,11 @@ class Semesteroppgave_Sentral_rev1
                         using NpgsqlDataReader rdr = cmd.ExecuteReader();
 
                         //Hente navn på kolonner
-                        Console.WriteLine($"{rdr.GetName(0),9} {rdr.GetName(1),-10} {rdr.GetName(2),-12} {rdr.GetName(3),-10} {rdr.GetName(4),-15}");
+                        Console.WriteLine($"{rdr.GetName(0),9} {rdr.GetName(1),-10} {rdr.GetName(2),-12} {rdr.GetName(3),-10}");
                         //Hente ut data for hver rad
                         while (rdr.Read())
                         {
-                            Console.WriteLine($"{rdr.GetInt32(0),9} {rdr.GetString(1),-10} {rdr.GetString(2),-12} {rdr.GetDate(3),-10} {rdr.GetBoolean(4),-15}");
+                            Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetTimeStamp(2),-12} {rdr.GetBoolean(3),-10}");
                         }
                     }
                     else if (rapportvalg == 3)
@@ -432,11 +432,11 @@ class Semesteroppgave_Sentral_rev1
                         using NpgsqlDataReader rdr = cmd.ExecuteReader();
 
                         //Hente navn på kolonner
-                        Console.WriteLine($"{rdr.GetName(0),9} {rdr.GetName(1),-10} {rdr.GetName(2),-12} {rdr.GetName(3),-10} {rdr.GetName(4),-15}");
+                        Console.WriteLine($"{rdr.GetName(0),9} {rdr.GetName(1),-10} {rdr.GetName(2),-12} {rdr.GetName(3),-10}");
                         //Hente ut data for hver rad
                         while (rdr.Read())
                         {
-                            Console.WriteLine($"{rdr.GetInt32(0),9} {rdr.GetString(1),-10} {rdr.GetString(2),-12} {rdr.GetDate(3),-10} {rdr.GetBoolean(4),-15}");
+                            Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetTimeStamp(2),-12} {rdr.GetBoolean(3),-10}");
                         }
 
                     }
@@ -456,11 +456,11 @@ class Semesteroppgave_Sentral_rev1
                         using NpgsqlDataReader rdr = cmd.ExecuteReader();
 
                         //Hente navn på kolonner
-                        Console.WriteLine($"{rdr.GetName(0),9} {rdr.GetName(1),-10} {rdr.GetName(2),-12} {rdr.GetName(3),-10} {rdr.GetName(4),-15}");
+                        Console.WriteLine($"{rdr.GetName(0),9} {rdr.GetName(1),-10} {rdr.GetName(2),-12} {rdr.GetName(3),-10}");
                         //Hente ut data for hver rad
                         while (rdr.Read())
                         {
-                            Console.WriteLine($"{rdr.GetInt32(0),9} {rdr.GetString(1),-10} {rdr.GetDate(2),-12} {rdr.GetString(3),-10} {rdr.GetString(4),-15}");
+                            Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetTimeStamp(1),-10} {rdr.GetString(2),-12} {rdr.GetString(3),-10}");
                         }
 
                     }
@@ -483,15 +483,15 @@ class Semesteroppgave_Sentral_rev1
                         using NpgsqlDataReader rdr = cmd.ExecuteReader();
 
                         //Hente navn på kolonner
-                        Console.WriteLine($"{rdr.GetName(0),9} {rdr.GetName(1),-10} {rdr.GetName(2),-12} {rdr.GetName(3),-10} {rdr.GetName(4),-15}");
+                        Console.WriteLine($"{rdr.GetName(0),9} {rdr.GetName(1),-10} {rdr.GetName(2),-12} {rdr.GetName(3),-10}");
                         //Hente ut data for hver rad
                         while (rdr.Read())
                         {
-                            Console.WriteLine($"{rdr.GetInt32(0),9} {rdr.GetString(1),-10} {rdr.GetString(2),-12} {rdr.GetDate(3),-10} {rdr.GetBoolean(4),-15}");
+                            Console.WriteLine($"{rdr.GetString(0),9} {rdr.GetString(1),-10} {rdr.GetDateTime(2),-12} {rdr.GetBoolean(3),-10}");
                         }
-
+                        
                     }
-
+                    
 
                 }
 
@@ -535,6 +535,10 @@ class Semesteroppgave_Sentral_rev1
         string[] splittetTekst = new string[100];
 
         bool ferdig = false;
+
+
+        string hilsen = "Velkommen til semesteroppgave";
+        SendTekst(kommSokkel, hilsen, out ferdig);
 
         while (!ferdig)
         {
